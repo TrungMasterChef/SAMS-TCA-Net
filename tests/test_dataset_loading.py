@@ -74,3 +74,51 @@ def test_harder_preprocessing_returns_windowed_diff_sample_normalized_data(tmp_p
     assert val_x.shape == (3, 12, 3)
     assert torch.isfinite(train_x).all()
     assert torch.isfinite(val_x).all()
+
+
+def test_raw_diff_transform_doubles_channel_count(tmp_path: Path) -> None:
+    x = np.random.randn(20, 3, 32).astype(np.float32)
+    y = np.arange(20, dtype=np.int64) % 4
+    np.save(tmp_path / "inputs.npy", x)
+    np.save(tmp_path / "labels.npy", y)
+
+    train_loader, _, _ = create_dataloaders(
+        tmp_path,
+        batch_size=5,
+        input_file="inputs.npy",
+        label_file="labels.npy",
+        input_layout="nct",
+        normalization="sample",
+        window_length=12,
+        crop_mode="random_train_center_eval",
+        transform="raw_diff",
+        augment=False,
+    )
+    batch_x, _ = next(iter(train_loader))
+    assert batch_x.shape == (5, 12, 6)
+    assert torch.isfinite(batch_x).all()
+
+
+def test_eval_multicrop_batches_are_bktc(tmp_path: Path) -> None:
+    x = np.random.randn(20, 3, 32).astype(np.float32)
+    y = np.arange(20, dtype=np.int64) % 4
+    np.save(tmp_path / "inputs.npy", x)
+    np.save(tmp_path / "labels.npy", y)
+
+    _, val_loader, _ = create_dataloaders(
+        tmp_path,
+        batch_size=3,
+        input_file="inputs.npy",
+        label_file="labels.npy",
+        input_layout="nct",
+        normalization="sample",
+        window_length=12,
+        crop_mode="random_train_center_eval",
+        transform="raw_diff",
+        eval_num_crops=4,
+        augment=False,
+    )
+    batch_x, batch_y = next(iter(val_loader))
+    assert batch_x.shape == (3, 4, 12, 6)
+    assert batch_y.shape == (3,)
+    assert torch.isfinite(batch_x).all()

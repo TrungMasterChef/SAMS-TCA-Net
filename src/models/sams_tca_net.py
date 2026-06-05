@@ -113,20 +113,24 @@ class ResidualInceptionAttentionBlock(nn.Module):
 
 
 class ClassAwareAttentionPooling(nn.Module):
-    """Class-aware temporal pooling that produces logits directly."""
+    """Class-aware temporal pooling fused with global average/max context."""
 
     def __init__(self, channels: int, num_classes: int) -> None:
         super().__init__()
         self.attention = nn.Conv1d(channels, num_classes, kernel_size=1)
         self.classifier = nn.Linear(channels, num_classes)
+        self.global_classifier = nn.Linear(channels * 2, num_classes)
 
     def forward(self, x: Tensor) -> Tensor:
         """Pool temporal features into class logits shaped [B, num_classes]."""
         attn = torch.softmax(self.attention(x), dim=-1)
         pooled = torch.einsum("bkt,bct->bkc", attn, x)
         class_weights = self.classifier.weight.unsqueeze(0)
-        logits = (pooled * class_weights).sum(dim=-1) + self.classifier.bias.unsqueeze(0)
-        return logits
+        class_logits = (pooled * class_weights).sum(dim=-1) + self.classifier.bias.unsqueeze(0)
+        avg_pool = x.mean(dim=-1)
+        max_pool = x.amax(dim=-1)
+        global_logits = self.global_classifier(torch.cat([avg_pool, max_pool], dim=1))
+        return class_logits + global_logits
 
 
 class GlobalAveragePoolingClassifier(nn.Module):

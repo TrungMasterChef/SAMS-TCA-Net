@@ -56,6 +56,7 @@ def build_dataloaders(config: dict) -> tuple:
             crop_mode=str(data_cfg.get("crop_mode", "none")),
             temporal_stride=int(data_cfg.get("temporal_stride", 1)),
             transform=str(data_cfg.get("transform", "raw")),
+            eval_num_crops=int(data_cfg.get("eval_num_crops", 1)),
         )
 
     print(f"Data not found in {data_dir}. Using dummy data.")
@@ -85,7 +86,12 @@ def evaluate_loader(
         for x, y in loader:
             x = x.to(device)
             y = y.to(device)
-            logits = model(x)
+            if x.ndim == 4:
+                batch_size, num_crops, seq_len, channels = x.shape
+                logits = model(x.reshape(batch_size * num_crops, seq_len, channels))
+                logits = logits.reshape(batch_size, num_crops, -1).mean(dim=1)
+            else:
+                logits = model(x)
             loss = criterion(logits, y)
             total_loss += loss.item() * x.size(0)
             total_items += x.size(0)
@@ -117,14 +123,29 @@ def train(config_path: str) -> list[dict[str, float | int]]:
     parameter_count = count_parameters(model)
     print(f"parameter_count={parameter_count}")
 
-    criterion = nn.CrossEntropyLoss()
+    training_cfg = config["training"]
+    criterion = nn.CrossEntropyLoss(label_smoothing=float(training_cfg.get("label_smoothing", 0.0)))
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=float(config["training"].get("learning_rate", 1e-3)),
         weight_decay=float(config["training"].get("weight_decay", 1e-4)),
     )
-
-    training_cfg = config["training"]
+    scheduler_name = str(training_cfg.get("scheduler", "none")).lower()
+    scheduler = None
+    if scheduler_name == "reduce_on_plateau":
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="max",
+            factor=float(training_cfg.get("scheduler_factor", 0.5)),
+            patience=int(training_cfg.get("scheduler_patience", 4)),
+            min_lr=float(training_cfg.get("min_learning_rate", 1e-5)),
+        )
+    elif scheduler_name == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=int(training_cfg.get("epochs", 10)),
+            eta_min=float(training_cfg.get("min_learning_rate", 1e-5)),
+        )
     best_checkpoint_path = training_cfg.get(
         "best_checkpoint_path",
         training_cfg.get("checkpoint_path", "outputs/best_checkpoint.pt"),
@@ -158,6 +179,9 @@ def train(config_path: str) -> list[dict[str, float | int]]:
             logits = model(x)
             loss = criterion(logits, y)
             loss.backward()
+            gradient_clip_norm = float(training_cfg.get("gradient_clip_norm", 0.0))
+            if gradient_clip_norm > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip_norm)
             optimizer.step()
             total_loss += loss.item() * x.size(0)
             total_items += x.size(0)
@@ -246,6 +270,12 @@ def train(config_path: str) -> list[dict[str, float | int]]:
                     "is_best": True,
                 },
             )
+
+        if scheduler is not None:
+            if scheduler_name == "reduce_on_plateau":
+                scheduler.step(val_macro_f1)
+            else:
+                scheduler.step()
 
         best_marker = " *" if improved else ""
         log_line = (

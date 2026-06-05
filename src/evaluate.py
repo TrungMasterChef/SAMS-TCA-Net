@@ -58,6 +58,7 @@ def build_test_loader(config: dict) -> torch.utils.data.DataLoader:
             crop_mode=str(data_cfg.get("crop_mode", "none")),
             temporal_stride=int(data_cfg.get("temporal_stride", 1)),
             transform=str(data_cfg.get("transform", "raw")),
+            eval_num_crops=int(data_cfg.get("eval_num_crops", 1)),
         )
         return test_loader
 
@@ -90,7 +91,13 @@ def evaluate(config_path: str, checkpoint_path: str | None = None) -> dict[str, 
     y_pred: list[np.ndarray] = []
     with torch.no_grad():
         for x, y in test_loader:
-            logits = model(x.to(device))
+            x = x.to(device)
+            if x.ndim == 4:
+                batch_size, num_crops, seq_len, channels = x.shape
+                logits = model(x.reshape(batch_size * num_crops, seq_len, channels))
+                logits = logits.reshape(batch_size, num_crops, -1).mean(dim=1)
+            else:
+                logits = model(x)
             preds = logits.argmax(dim=1).cpu().numpy()
             y_pred.append(preds)
             y_true.append(y.numpy())

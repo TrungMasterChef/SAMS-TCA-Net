@@ -112,6 +112,7 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         crop_mode: str = "none",
         temporal_stride: int = 1,
         transform: str = "raw",
+        eval_num_crops: int = 1,
     ) -> None:
         super().__init__()
         if split not in {"train", "val", "test"}:
@@ -142,33 +143,58 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         self.crop_mode = crop_mode
         self.temporal_stride = max(1, temporal_stride)
         self.transform = transform
+        self.eval_num_crops = max(1, eval_num_crops)
 
         if normalization not in {"train", "sample", "none"}:
             raise ValueError("normalization must be one of: train, sample, none")
         if crop_mode not in {"none", "center", "random", "random_train_center_eval"}:
             raise ValueError("crop_mode must be one of: none, center, random, random_train_center_eval")
-        if transform not in {"raw", "diff"}:
-            raise ValueError("transform must be one of: raw, diff")
+        if transform not in {"raw", "diff", "raw_diff"}:
+            raise ValueError("transform must be one of: raw, diff, raw_diff")
 
     def __len__(self) -> int:
         return int(self.y.shape[0])
 
     def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
         x = np.asarray(self.x[idx], dtype=np.float32)
-        x = self._preprocess(x)
+        if self.split != "train" and self.eval_num_crops > 1:
+            x = self._preprocess_multicrop(x)
+        else:
+            x = self._preprocess(x)
         if self.augment:
             x = self._augment(x)
         y = self.y[idx]
         return torch.from_numpy(x.astype(np.float32)), torch.tensor(y, dtype=torch.long)
+
+    def _preprocess_multicrop(self, x: np.ndarray) -> np.ndarray:
+        """Return deterministic evaluation crops shaped [K, T, C]."""
+        if self.temporal_stride > 1:
+            x = x[:: self.temporal_stride]
+        if self.window_length is None or self.window_length <= 0 or self.window_length >= x.shape[0]:
+            return self._apply_transform_and_normalization(x)[None, ...]
+
+        max_start = x.shape[0] - self.window_length
+        starts = np.linspace(0, max_start, num=self.eval_num_crops).round().astype(np.int64)
+        crops = [self._apply_transform_and_normalization(x[start : start + self.window_length]) for start in starts]
+        return np.stack(crops, axis=0)
 
     def _preprocess(self, x: np.ndarray) -> np.ndarray:
         """Apply deterministic preprocessing before optional augmentation."""
         if self.temporal_stride > 1:
             x = x[:: self.temporal_stride]
         x = self._crop(x)
+        return self._apply_transform_and_normalization(x)
+
+    def _apply_transform_and_normalization(self, x: np.ndarray) -> np.ndarray:
+        """Apply signal transform and normalization to one temporal window."""
         if self.transform == "diff":
             x = np.diff(x, axis=0, prepend=x[:1])
+        elif self.transform == "raw_diff":
+            diff = np.diff(x, axis=0, prepend=x[:1])
+            x = np.concatenate([x, diff], axis=-1)
         if self.normalization == "train":
+            if x.shape[-1] != self.mean.shape[-1]:
+                raise ValueError("train normalization is incompatible with transforms that change channel count")
             x = (x - self.mean.squeeze(0)) / self.std.squeeze(0)
         elif self.normalization == "sample":
             mean = x.mean(axis=0, keepdims=True)
@@ -224,6 +250,7 @@ def create_dataloaders(
     crop_mode: str = "none",
     temporal_stride: int = 1,
     transform: str = "raw",
+    eval_num_crops: int = 1,
     loader_kwargs: dict[str, Any] | None = None,
 ) -> tuple[DataLoader[tuple[Tensor, Tensor]], DataLoader[tuple[Tensor, Tensor]], DataLoader[tuple[Tensor, Tensor]]]:
     """Create train/val/test DataLoaders sharing train-set normalization."""
@@ -257,6 +284,7 @@ def create_dataloaders(
             crop_mode=crop_mode,
             temporal_stride=temporal_stride,
             transform=transform,
+            eval_num_crops=eval_num_crops,
         )
         for split in ("train", "val", "test")
     }

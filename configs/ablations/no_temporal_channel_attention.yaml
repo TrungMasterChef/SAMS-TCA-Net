@@ -1,7 +1,7 @@
 seed: 42
 model:
   name: sams_tca
-  num_channels: 27
+  num_channels: 54
   num_classes: 17
   hidden_channels: 64
   num_blocks: 4
@@ -18,15 +18,16 @@ data:
   input_layout: nct
   seq_len: 6000
   normalization: sample
-  window_length: 1024
+  window_length: 2048
   crop_mode: random_train_center_eval
   temporal_stride: 1
-  transform: diff
+  transform: raw_diff
   train_ratio: 0.7
   val_ratio: 0.15
   num_workers: 0
   augment: true
   dummy_samples: 128
+  eval_num_crops: 5
 training:
   batch_size: 16
   epochs: 10
@@ -48,3 +49,9 @@ training:
   val_confusion_matrix_npy_path: outputs/ablations/no_temporal_channel_attention/val_confusion_matrix.npy
   val_confusion_matrix_png_path: outputs/ablations/no_temporal_channel_attention/val_confusion_matrix.png
   val_f1_scores_path: outputs/ablations/no_temporal_channel_attention/val_f1_scores.csv
+  label_smoothing: 0.05
+  gradient_clip_norm: 1.0
+  scheduler: reduce_on_plateau
+  scheduler_patience: 4
+  scheduler_factor: 0.5
+  min_learning_rate: 1.0e-05
