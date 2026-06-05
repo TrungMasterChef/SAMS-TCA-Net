@@ -13,6 +13,14 @@ import torch.nn.functional as F
 InputLayout = Literal["btc", "bct"]
 
 
+def make_group_norm(channels: int, max_groups: int = 8) -> nn.GroupNorm:
+    """Create GroupNorm with a valid group count for the channel size."""
+    groups = min(max_groups, channels)
+    while channels % groups != 0:
+        groups -= 1
+    return nn.GroupNorm(num_groups=groups, num_channels=channels)
+
+
 class SensorAxisAttention(nn.Module):
     """Attention over raw sensor axes before temporal feature extraction."""
 
@@ -83,7 +91,7 @@ class ResidualInceptionAttentionBlock(nn.Module):
             [
                 nn.Sequential(
                     nn.Conv1d(channels, channels, kernel_size=k, padding=k // 2, bias=False),
-                    nn.BatchNorm1d(channels),
+                    make_group_norm(channels),
                     nn.ReLU(inplace=True),
                 )
                 for k in kernels
@@ -93,7 +101,7 @@ class ResidualInceptionAttentionBlock(nn.Module):
         self.tca = TemporalChannelAttention1D(channels) if use_temporal_channel_attention else nn.Identity()
         self.proj = nn.Sequential(
             nn.Conv1d(channels, channels, kernel_size=1, bias=False),
-            nn.BatchNorm1d(channels),
+            make_group_norm(channels),
             nn.Dropout(dropout),
         )
         self.activation = nn.ReLU(inplace=True)
@@ -198,7 +206,7 @@ class SAMSTCANet(nn.Module):
         self.sensor_attention = SensorAxisAttention(num_channels) if use_sensor_attention else nn.Identity()
         self.stem = nn.Sequential(
             nn.Conv1d(num_channels, hidden_channels, kernel_size=7, padding=3, bias=False),
-            nn.BatchNorm1d(hidden_channels),
+            make_group_norm(hidden_channels),
             nn.ReLU(inplace=True),
         )
         self.blocks = nn.Sequential(

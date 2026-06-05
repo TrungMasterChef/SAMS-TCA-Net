@@ -94,3 +94,9 @@ def test_sams_tca_ablation_flags_forward() -> None:
         logits = model(x)
         assert logits.shape == (2, 5)
         assert torch.isfinite(logits).all()
+
+
+def test_sams_tca_uses_group_norm_instead_of_batch_norm() -> None:
+    model = SAMSTCANet(num_channels=3, num_classes=5, hidden_channels=16, num_blocks=2)
+    assert any(isinstance(module, torch.nn.GroupNorm) for module in model.modules())
+    assert not any(isinstance(module, torch.nn.BatchNorm1d) for module in model.modules())

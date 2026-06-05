@@ -57,7 +57,7 @@ eval_num_crops: 5
 
 This trains on random windows instead of the full 6000-step signal, evaluates with five deterministic crops averaged at logit level, removes per-sample offset/scale cues, and concatenates raw signals with temporal differences. Because `raw_diff` doubles the channel count, the default configs use `model.num_channels: 54`. To return to the easier full-signal setup, set `normalization: train`, `crop_mode: none`, `transform: raw`, `eval_num_crops: 1`, and `model.num_channels: 27`.
 
-The default SAMS-TCA-Net config also uses label smoothing, gradient clipping, and ReduceLROnPlateau scheduling on validation Macro-F1 to reduce validation instability.
+The default SAMS-TCA-Net config also uses GroupNorm, label smoothing, gradient clipping, and ReduceLROnPlateau scheduling on validation Macro-F1 to reduce validation instability.
 
 ## Train
 
