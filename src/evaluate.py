@@ -53,6 +53,9 @@ def build_test_loader(config: dict) -> torch.utils.data.DataLoader:
             val_ratio=float(data_cfg.get("val_ratio", 0.15)),
             seed=int(config.get("seed", 42)),
             augment=False,
+            jitter_std=float(data_cfg.get("jitter_std", 0.01)),
+            scaling_std=float(data_cfg.get("scaling_std", 0.1)),
+            time_mask_ratio=float(data_cfg.get("time_mask_ratio", 0.05)),
             input_file=input_file,
             label_file=label_file,
             input_layout=str(data_cfg.get("input_layout", "ntc")),
@@ -70,6 +73,7 @@ def build_test_loader(config: dict) -> torch.utils.data.DataLoader:
             lowcut=float(data_cfg.get("lowcut", 0.5)),
             highcut=float(data_cfg.get("highcut", 40.0)),
             filter_order=int(data_cfg.get("filter_order", 4)),
+            split_strategy=str(data_cfg.get("split_strategy", "stratified")),
         )
         return test_loader
 

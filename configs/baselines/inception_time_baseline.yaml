@@ -32,6 +32,10 @@ data:
   lowcut: 0.5
   highcut: 40.0
   filter_order: 4
+  split_strategy: stratified
+  jitter_std: 0.005
+  scaling_std: 0.05
+  time_mask_ratio: 0.02
 training:
   batch_size: 16
   epochs: 10

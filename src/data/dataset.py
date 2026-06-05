@@ -52,6 +52,64 @@ def make_split_indices(
     )
 
 
+def make_stratified_split_indices(
+    labels: np.ndarray,
+    train_ratio: float = 0.7,
+    val_ratio: float = 0.15,
+    seed: int = 42,
+) -> SplitIndices:
+    """Create deterministic stratified train/val/test indices by label."""
+    if labels.ndim != 1:
+        raise ValueError("labels must be a 1D array")
+    if not 0.0 < train_ratio < 1.0:
+        raise ValueError("train_ratio must be in (0, 1)")
+    if not 0.0 <= val_ratio < 1.0:
+        raise ValueError("val_ratio must be in [0, 1)")
+    if train_ratio + val_ratio >= 1.0:
+        raise ValueError("train_ratio + val_ratio must be < 1")
+
+    rng = np.random.default_rng(seed)
+    train_parts: list[np.ndarray] = []
+    val_parts: list[np.ndarray] = []
+    test_parts: list[np.ndarray] = []
+    for label in np.unique(labels):
+        label_indices = np.flatnonzero(labels == label)
+        label_indices = rng.permutation(label_indices)
+        num_label_samples = len(label_indices)
+        train_count = int(num_label_samples * train_ratio)
+        val_count = int(num_label_samples * val_ratio)
+        if val_ratio > 0 and val_count == 0 and num_label_samples - train_count >= 2:
+            val_count = 1
+        if train_count + val_count >= num_label_samples and num_label_samples >= 3:
+            train_count = max(1, num_label_samples - val_count - 1)
+        train_end = train_count
+        val_end = train_end + val_count
+        train_parts.append(label_indices[:train_end])
+        val_parts.append(label_indices[train_end:val_end])
+        test_parts.append(label_indices[val_end:])
+
+    return SplitIndices(
+        train=rng.permutation(np.concatenate(train_parts)),
+        val=rng.permutation(np.concatenate(val_parts)),
+        test=rng.permutation(np.concatenate(test_parts)),
+    )
+
+
+def make_dataset_splits(
+    labels: np.ndarray,
+    train_ratio: float = 0.7,
+    val_ratio: float = 0.15,
+    seed: int = 42,
+    split_strategy: str = "stratified",
+) -> SplitIndices:
+    """Create sequence-level splits using random or stratified strategy."""
+    if split_strategy == "stratified":
+        return make_stratified_split_indices(labels, train_ratio, val_ratio, seed)
+    if split_strategy == "random":
+        return make_split_indices(labels.shape[0], train_ratio, val_ratio, seed)
+    raise ValueError("split_strategy must be one of: stratified, random")
+
+
 def compute_train_stats(x: np.ndarray, train_indices: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Compute per-channel mean and std from train samples only."""
     train_x = x[train_indices]
@@ -189,6 +247,7 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         lowcut: float = 0.5,
         highcut: float = 40.0,
         filter_order: int = 4,
+        split_strategy: str = "stratified",
     ) -> None:
         super().__init__()
         if split not in {"train", "val", "test"}:
@@ -200,7 +259,7 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         else:
             x, y = source_x, source_y
 
-        splits = make_split_indices(x.shape[0], train_ratio, val_ratio, seed)
+        splits = make_dataset_splits(y, train_ratio, val_ratio, seed, split_strategy)
         split_indices = getattr(splits, split)
         if mean is None or std is None:
             mean, std = compute_train_stats(x, splits.train)
@@ -375,12 +434,16 @@ def create_dataloaders(
     lowcut: float = 0.5,
     highcut: float = 40.0,
     filter_order: int = 4,
+    split_strategy: str = "stratified",
+    jitter_std: float = 0.01,
+    scaling_std: float = 0.1,
+    time_mask_ratio: float = 0.05,
     loader_kwargs: dict[str, Any] | None = None,
 ) -> tuple[DataLoader[tuple[Tensor, Tensor]], DataLoader[tuple[Tensor, Tensor]], DataLoader[tuple[Tensor, Tensor]]]:
     """Create train/val/test DataLoaders sharing train-set normalization."""
     data_path = Path(data_dir)
     x, y = load_array_pair(data_path, input_file, label_file, input_layout, mmap_mode="r")
-    splits = make_split_indices(x.shape[0], train_ratio, val_ratio, seed)
+    splits = make_dataset_splits(y, train_ratio, val_ratio, seed, split_strategy)
     if normalization == "train":
         if bandpass_filter:
             mean, std = compute_filtered_train_stats(
@@ -408,6 +471,9 @@ def create_dataloaders(
             mean=mean,
             std=std,
             augment=augment,
+            jitter_std=jitter_std,
+            scaling_std=scaling_std,
+            time_mask_ratio=time_mask_ratio,
             input_file=input_file,
             label_file=label_file,
             input_layout=input_layout,
@@ -427,6 +493,7 @@ def create_dataloaders(
             lowcut=lowcut,
             highcut=highcut,
             filter_order=filter_order,
+            split_strategy=split_strategy,
         )
         for split in ("train", "val", "test")
     }

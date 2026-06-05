@@ -6,7 +6,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.data.dataset import Z24AccelerationDataset, create_dataloaders
+from src.data.dataset import Z24AccelerationDataset, create_dataloaders, make_stratified_split_indices
 
 
 def test_dataset_loads_nct_and_returns_tc(tmp_path: Path) -> None:
@@ -71,7 +71,7 @@ def test_harder_preprocessing_returns_windowed_diff_sample_normalized_data(tmp_p
     train_x, _ = next(iter(train_loader))
     val_x, _ = next(iter(val_loader))
     assert train_x.shape == (5, 12, 3)
-    assert val_x.shape == (3, 12, 3)
+    assert val_x.shape == (4, 12, 3)
     assert torch.isfinite(train_x).all()
     assert torch.isfinite(val_x).all()
 
@@ -145,7 +145,15 @@ def test_sliding_window_preprocessing_repeats_labels_and_returns_windows(tmp_pat
         augment=False,
     )
     batch_x, batch_y = next(iter(train_loader))
-    assert len(train_loader.dataset) == 14 * 5
+    assert len(train_loader.dataset) == 12 * 5
     assert batch_x.shape == (4, 12, 3)
     assert batch_y.shape == (4,)
     assert torch.isfinite(batch_x).all()
+
+
+def test_stratified_split_balances_each_class() -> None:
+    labels = np.repeat(np.arange(4), 10)
+    splits = make_stratified_split_indices(labels, train_ratio=0.6, val_ratio=0.2, seed=42)
+    assert np.bincount(labels[splits.train], minlength=4).tolist() == [6, 6, 6, 6]
+    assert np.bincount(labels[splits.val], minlength=4).tolist() == [2, 2, 2, 2]
+    assert np.bincount(labels[splits.test], minlength=4).tolist() == [2, 2, 2, 2]

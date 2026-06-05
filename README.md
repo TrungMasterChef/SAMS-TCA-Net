@@ -67,6 +67,15 @@ This applies a zero-phase Butterworth bandpass filter, normalizes by train-split
 
 The default SAMS-TCA-Net config also uses GroupNorm, label smoothing, gradient clipping, and ReduceLROnPlateau scheduling on validation Macro-F1 to reduce validation instability.
 
+Splits are stratified by label at the original sequence level before sliding-window expansion. Training augmentation is configurable through:
+
+```yaml
+augment: true
+jitter_std: 0.005
+scaling_std: 0.05
+time_mask_ratio: 0.02
+```
+
 ## Train
 
 ```bash
