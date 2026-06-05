@@ -40,6 +40,9 @@ def run_models(config_paths: list[Path], output_csv: str | Path) -> None:
                 "accuracy": metrics["accuracy"],
                 "macro_f1": metrics["macro_f1"],
                 "weighted_f1": metrics["weighted_f1"],
+                "roc_auc_macro": metrics["roc_auc_macro"],
+                "roc_auc_micro": metrics["roc_auc_micro"],
+                "roc_auc_weighted": metrics["roc_auc_weighted"],
                 "parameter_count": metrics["parameter_count"],
                 "checkpoint_path": metrics["checkpoint_path"],
                 "history_path": config["training"].get("history_path"),
@@ -48,6 +51,8 @@ def run_models(config_paths: list[Path], output_csv: str | Path) -> None:
                 "val_f1_scores_path": config["training"].get("val_f1_scores_path"),
                 "test_confusion_matrix_png_path": config["training"].get("confusion_matrix_png_path"),
                 "test_f1_scores_path": config["training"].get("f1_scores_path"),
+                "roc_curve_path": config["training"].get("roc_curve_path"),
+                "tsne_path": config["training"].get("tsne_path"),
             }
         )
 

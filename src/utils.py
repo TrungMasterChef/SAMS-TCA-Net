@@ -206,6 +206,147 @@ def save_confusion_matrix_png(path: str | Path, confusion: np.ndarray) -> None:
     plt.close(fig)
 
 
+def compute_multiclass_auc(
+    y_true: np.ndarray,
+    probabilities: np.ndarray,
+    num_classes: int,
+) -> dict[str, float | None]:
+    """Compute one-vs-rest multiclass ROC-AUC scores."""
+    from sklearn.metrics import roc_auc_score
+
+    labels = np.arange(num_classes)
+    try:
+        macro_auc = float(
+            roc_auc_score(
+                y_true,
+                probabilities,
+                labels=labels,
+                multi_class="ovr",
+                average="macro",
+            )
+        )
+        weighted_auc = float(
+            roc_auc_score(
+                y_true,
+                probabilities,
+                labels=labels,
+                multi_class="ovr",
+                average="weighted",
+            )
+        )
+    except ValueError:
+        macro_auc = None
+        weighted_auc = None
+
+    y_one_hot = np.eye(num_classes, dtype=np.int64)[y_true]
+    try:
+        micro_auc = float(roc_auc_score(y_one_hot.ravel(), probabilities.ravel()))
+    except ValueError:
+        micro_auc = None
+
+    return {
+        "roc_auc_macro": macro_auc,
+        "roc_auc_micro": micro_auc,
+        "roc_auc_weighted": weighted_auc,
+    }
+
+
+def save_roc_curve_png(
+    path: str | Path,
+    y_true: np.ndarray,
+    probabilities: np.ndarray,
+    num_classes: int,
+) -> None:
+    """Save one-vs-rest ROC curves for every class and the micro-average."""
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import auc, roc_curve
+
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    y_one_hot = np.eye(num_classes, dtype=np.int64)[y_true]
+
+    fig, ax = plt.subplots(figsize=(8, 7))
+    for class_id in range(num_classes):
+        positives = y_one_hot[:, class_id].sum()
+        negatives = y_one_hot.shape[0] - positives
+        if positives == 0 or negatives == 0:
+            continue
+        fpr, tpr, _ = roc_curve(y_one_hot[:, class_id], probabilities[:, class_id])
+        ax.plot(fpr, tpr, linewidth=1.0, alpha=0.75, label=f"class {class_id} AUC={auc(fpr, tpr):.3f}")
+
+    try:
+        fpr_micro, tpr_micro, _ = roc_curve(y_one_hot.ravel(), probabilities.ravel())
+        ax.plot(
+            fpr_micro,
+            tpr_micro,
+            color="black",
+            linewidth=2.0,
+            label=f"micro AUC={auc(fpr_micro, tpr_micro):.3f}",
+        )
+    except ValueError:
+        pass
+
+    ax.plot([0, 1], [0, 1], linestyle="--", color="gray", linewidth=1.0)
+    ax.set_xlabel("False Positive Rate")
+    ax.set_ylabel("True Positive Rate")
+    ax.set_title("One-vs-Rest ROC Curves")
+    ax.legend(loc="lower right", fontsize=7, ncol=2)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+
+
+def save_tsne_png(
+    path: str | Path,
+    features: np.ndarray,
+    labels: np.ndarray,
+    max_points: int = 2000,
+    seed: int = 42,
+) -> None:
+    """Save a 2D t-SNE visualization from model features or logits."""
+    if features.shape[0] < 3:
+        return
+
+    import matplotlib.pyplot as plt
+    from sklearn.manifold import TSNE
+
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if features.shape[0] > max_points:
+        rng = np.random.default_rng(seed)
+        indices = rng.choice(features.shape[0], size=max_points, replace=False)
+        features = features[indices]
+        labels = labels[indices]
+
+    perplexity = min(30, max(2, (features.shape[0] - 1) // 3))
+    embedding = TSNE(
+        n_components=2,
+        perplexity=perplexity,
+        init="pca",
+        learning_rate="auto",
+        random_state=seed,
+    ).fit_transform(features)
+
+    fig, ax = plt.subplots(figsize=(8, 7))
+    scatter = ax.scatter(
+        embedding[:, 0],
+        embedding[:, 1],
+        c=labels,
+        cmap="tab20",
+        s=12,
+        alpha=0.8,
+        linewidths=0,
+    )
+    ax.set_title("t-SNE of Model Logits")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    fig.colorbar(scatter, ax=ax, label="Class")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+
+
 def save_history_plots(path: str | Path, rows: list[dict[str, Any]]) -> None:
     """Save train/validation loss, accuracy, and macro-F1 curves."""
     if not rows:

@@ -58,3 +58,5 @@ training:
   scheduler_patience: 4
   scheduler_factor: 0.5
   min_learning_rate: 1.0e-05
+  roc_curve_path: outputs/baselines/resnet_1d/roc_curve.png
+  tsne_path: outputs/baselines/resnet_1d/tsne.png

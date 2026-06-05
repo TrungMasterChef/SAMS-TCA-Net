@@ -12,6 +12,7 @@ from src.data import create_dataloaders
 from src.models import build_model
 from src.utils import (
     accuracy_score_np,
+    compute_multiclass_auc,
     confusion_matrix_np,
     count_parameters,
     f1_scores_from_confusion,
@@ -21,7 +22,9 @@ from src.utils import (
     per_class_f1_from_confusion,
     save_confusion_matrix_png,
     save_json,
+    save_roc_curve_png,
     save_table_csv,
+    save_tsne_png,
 )
 
 
@@ -97,6 +100,8 @@ def evaluate(config_path: str, checkpoint_path: str | None = None) -> dict[str, 
     model.eval()
     y_true: list[np.ndarray] = []
     y_pred: list[np.ndarray] = []
+    y_prob: list[np.ndarray] = []
+    y_logits: list[np.ndarray] = []
     with torch.no_grad():
         for x, y in test_loader:
             x = x.to(device)
@@ -107,17 +112,25 @@ def evaluate(config_path: str, checkpoint_path: str | None = None) -> dict[str, 
             else:
                 logits = model(x)
             preds = logits.argmax(dim=1).cpu().numpy()
+            probabilities = torch.softmax(logits, dim=1).cpu().numpy()
             y_pred.append(preds)
+            y_prob.append(probabilities)
+            y_logits.append(logits.cpu().numpy())
             y_true.append(y.numpy())
 
     true = np.concatenate(y_true)
     pred = np.concatenate(y_pred)
-    confusion = confusion_matrix_np(true, pred, int(config["model"]["num_classes"]))
+    probabilities = np.concatenate(y_prob)
+    logits_np = np.concatenate(y_logits)
+    num_classes = int(config["model"]["num_classes"])
+    confusion = confusion_matrix_np(true, pred, num_classes)
     macro_f1, weighted_f1 = f1_scores_from_confusion(confusion)
+    auc_metrics = compute_multiclass_auc(true, probabilities, num_classes)
     metrics = {
         "accuracy": accuracy_score_np(true, pred),
         "macro_f1": macro_f1,
         "weighted_f1": weighted_f1,
+        **auc_metrics,
         "parameter_count": parameter_count,
         "checkpoint_path": str(checkpoint_path) if checkpoint_path else None,
         "confusion_matrix": confusion,
@@ -126,26 +139,37 @@ def evaluate(config_path: str, checkpoint_path: str | None = None) -> dict[str, 
     confusion_npy_path = training_cfg.get("confusion_matrix_npy_path", "outputs/confusion_matrix.npy")
     confusion_png_path = training_cfg.get("confusion_matrix_png_path", "outputs/confusion_matrix.png")
     f1_scores_path = training_cfg.get("f1_scores_path", "outputs/f1_scores.csv")
+    roc_curve_path = training_cfg.get("roc_curve_path", "outputs/roc_curve.png")
+    tsne_path = training_cfg.get("tsne_path", "outputs/tsne.png")
     Path(confusion_npy_path).parent.mkdir(parents=True, exist_ok=True)
     np.save(confusion_npy_path, confusion)
     save_confusion_matrix_png(confusion_png_path, confusion)
     save_table_csv(f1_scores_path, per_class_f1_from_confusion(confusion))
+    save_roc_curve_png(roc_curve_path, true, probabilities, num_classes)
+    save_tsne_png(tsne_path, logits_np, true, seed=int(config.get("seed", 42)))
     save_json(
         metrics_path,
         {
             "accuracy": metrics["accuracy"],
             "macro_f1": metrics["macro_f1"],
             "weighted_f1": metrics["weighted_f1"],
+            "roc_auc_macro": metrics["roc_auc_macro"],
+            "roc_auc_micro": metrics["roc_auc_micro"],
+            "roc_auc_weighted": metrics["roc_auc_weighted"],
             "parameter_count": metrics["parameter_count"],
             "checkpoint_path": metrics["checkpoint_path"],
             "confusion_matrix_npy_path": confusion_npy_path,
             "confusion_matrix_png_path": confusion_png_path,
             "f1_scores_path": f1_scores_path,
+            "roc_curve_path": roc_curve_path,
+            "tsne_path": tsne_path,
         },
     )
     print(f"accuracy={metrics['accuracy']:.4f}")
     print(f"macro_f1={metrics['macro_f1']:.4f}")
     print(f"weighted_f1={metrics['weighted_f1']:.4f}")
+    print(f"roc_auc_macro={metrics['roc_auc_macro']}")
+    print(f"roc_auc_micro={metrics['roc_auc_micro']}")
     print(f"parameter_count={parameter_count}")
     print("confusion_matrix=")
     print(confusion)

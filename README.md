@@ -143,9 +143,11 @@ outputs/sams_tca/metrics.json
 outputs/sams_tca/confusion_matrix.npy
 outputs/sams_tca/confusion_matrix.png
 outputs/sams_tca/f1_scores.csv
+outputs/sams_tca/roc_curve.png
+outputs/sams_tca/tsne.png
 ```
 
-Metrics include the model parameter count.
+Metrics include the model parameter count and ROC-AUC scores (`roc_auc_macro`, `roc_auc_micro`, `roc_auc_weighted`).
 
 ## Test
 
