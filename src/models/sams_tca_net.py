@@ -74,8 +74,11 @@ class ResidualInceptionAttentionBlock(nn.Module):
         channels: int,
         kernels: tuple[int, ...] = (3, 5, 9, 15),
         dropout: float = 0.1,
+        use_scale_attention: bool = True,
+        use_temporal_channel_attention: bool = True,
     ) -> None:
         super().__init__()
+        self.use_scale_attention = use_scale_attention
         self.branches = nn.ModuleList(
             [
                 nn.Sequential(
@@ -86,8 +89,8 @@ class ResidualInceptionAttentionBlock(nn.Module):
                 for k in kernels
             ]
         )
-        self.scale_attention = nn.Linear(channels, len(kernels))
-        self.tca = TemporalChannelAttention1D(channels)
+        self.scale_attention = nn.Linear(channels, len(kernels)) if use_scale_attention else nn.Identity()
+        self.tca = TemporalChannelAttention1D(channels) if use_temporal_channel_attention else nn.Identity()
         self.proj = nn.Sequential(
             nn.Conv1d(channels, channels, kernel_size=1, bias=False),
             nn.BatchNorm1d(channels),
@@ -98,9 +101,12 @@ class ResidualInceptionAttentionBlock(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         """Return residual-enhanced features shaped [B, C, T]."""
         branch_outputs = torch.stack([branch(x) for branch in self.branches], dim=1)
-        context = branch_outputs.mean(dim=-1).mean(dim=1)
-        weights = torch.softmax(self.scale_attention(context), dim=-1)
-        mixed = (branch_outputs * weights[:, :, None, None]).sum(dim=1)
+        if self.use_scale_attention:
+            context = branch_outputs.mean(dim=-1).mean(dim=1)
+            weights = torch.softmax(self.scale_attention(context), dim=-1)
+            mixed = (branch_outputs * weights[:, :, None, None]).sum(dim=1)
+        else:
+            mixed = branch_outputs.mean(dim=1)
         mixed = self.tca(mixed)
         mixed = self.proj(mixed)
         return self.activation(x + mixed)
@@ -123,6 +129,18 @@ class ClassAwareAttentionPooling(nn.Module):
         return logits
 
 
+class GlobalAveragePoolingClassifier(nn.Module):
+    """Global average pooling followed by a linear classifier."""
+
+    def __init__(self, channels: int, num_classes: int) -> None:
+        super().__init__()
+        self.classifier = nn.Linear(channels, num_classes)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Pool temporal features into logits shaped [B, num_classes]."""
+        return self.classifier(x.mean(dim=-1))
+
+
 @dataclass(frozen=True)
 class SAMSTCANetConfig:
     """Configuration values for SAMSTCANet."""
@@ -133,6 +151,10 @@ class SAMSTCANetConfig:
     num_blocks: int = 4
     dropout: float = 0.1
     input_layout: InputLayout = "btc"
+    use_sensor_attention: bool = True
+    use_scale_attention: bool = True
+    use_temporal_channel_attention: bool = True
+    use_class_aware_pooling: bool = True
 
 
 class SAMSTCANet(nn.Module):
@@ -156,6 +178,10 @@ class SAMSTCANet(nn.Module):
         num_blocks: int = 4,
         dropout: float = 0.1,
         input_layout: InputLayout = "btc",
+        use_sensor_attention: bool = True,
+        use_scale_attention: bool = True,
+        use_temporal_channel_attention: bool = True,
+        use_class_aware_pooling: bool = True,
     ) -> None:
         super().__init__()
         if input_layout not in {"btc", "bct"}:
@@ -165,7 +191,7 @@ class SAMSTCANet(nn.Module):
         self.num_classes = num_classes
         self.input_layout = input_layout
 
-        self.sensor_attention = SensorAxisAttention(num_channels)
+        self.sensor_attention = SensorAxisAttention(num_channels) if use_sensor_attention else nn.Identity()
         self.stem = nn.Sequential(
             nn.Conv1d(num_channels, hidden_channels, kernel_size=7, padding=3, bias=False),
             nn.BatchNorm1d(hidden_channels),
@@ -176,11 +202,17 @@ class SAMSTCANet(nn.Module):
                 ResidualInceptionAttentionBlock(
                     channels=hidden_channels,
                     dropout=dropout,
+                    use_scale_attention=use_scale_attention,
+                    use_temporal_channel_attention=use_temporal_channel_attention,
                 )
                 for _ in range(num_blocks)
             ]
         )
-        self.pooling = ClassAwareAttentionPooling(hidden_channels, num_classes)
+        self.pooling = (
+            ClassAwareAttentionPooling(hidden_channels, num_classes)
+            if use_class_aware_pooling
+            else GlobalAveragePoolingClassifier(hidden_channels, num_classes)
+        )
 
     def forward(self, x: Tensor) -> Tensor:
         """Compute class logits without softmax.

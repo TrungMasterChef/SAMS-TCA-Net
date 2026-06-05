@@ -24,23 +24,37 @@ pip install -r requirements.txt
 
 ## Dataset
 
-The dataset directory should contain:
+The default config points to:
 
 ```text
-X.npy  # shape [N, T, C]
-y.npy  # shape [N]
+src/data/Z24-dataset-processed/inputs.npy  # shape [N, C, T]
+src/data/Z24-dataset-processed/labels.npy  # shape [N]
 ```
 
-For your Hugging Face dataset `thanglexuan/Z24-dataset-processed`, place or download the processed files into the path configured by `data.data_dir`, for example:
+For your local copy of `thanglexuan/Z24-dataset-processed`, the detected shape is:
 
 ```text
-data/Z24-dataset-processed/X.npy
-data/Z24-dataset-processed/y.npy
+inputs.npy: [1530, 27, 6000]
+labels.npy: [1530]
 ```
 
-The dataset class creates deterministic train/val/test splits, computes mean/std from the train split only, and returns tensors shaped `[T, C]`. PyTorch `DataLoader` batches are therefore `[B, T, C]`.
+Set `data.input_layout: nct` when the source array is `[N, C, T]`. Set it to `ntc` when the source array is `[N, T, C]`.
+
+The dataset class creates deterministic train/val/test splits, computes mean/std from the train split only, converts source arrays to `[N, T, C]`, and returns tensors shaped `[T, C]`. PyTorch `DataLoader` batches are therefore `[B, T, C]`.
 
 Augmentation options for training include jitter, scaling, and time masking.
+
+The default configs intentionally use a harder preprocessing protocol:
+
+```yaml
+normalization: sample
+window_length: 1024
+crop_mode: random_train_center_eval
+temporal_stride: 1
+transform: diff
+```
+
+This trains on short random windows instead of the full 6000-step signal, evaluates on center windows, removes per-sample amplitude/offset cues, and uses temporal differences. To return to the easier full-signal setup, set `normalization: train`, `crop_mode: none`, and `transform: raw`.
 
 ## Train
 
@@ -50,13 +64,77 @@ python -m src.train --config configs/sams_tca.yaml
 
 If `X.npy` and `y.npy` are not found, training falls back to dummy data so the pipeline can still run.
 
+Training writes:
+
+```text
+outputs/sams_tca/history.csv
+outputs/sams_tca/history.png
+outputs/sams_tca/training_log.txt
+outputs/sams_tca/best.pt
+outputs/sams_tca/last.pt
+outputs/sams_tca/val_confusion_matrix.npy
+outputs/sams_tca/val_confusion_matrix.png
+outputs/sams_tca/val_f1_scores.csv
+```
+
+The best checkpoint is selected by validation Macro-F1. Early stopping is controlled by `training.early_stopping_patience`.
+
+Baseline configs are available under `configs/baselines/`:
+
+```bash
+python -m src.train --config configs/baselines/simple_cnn_1d.yaml
+python -m src.train --config configs/baselines/fcn_1d.yaml
+python -m src.train --config configs/baselines/resnet_1d.yaml
+python -m src.train --config configs/baselines/inception_time_baseline.yaml
+```
+
+Each config selects the model through `model.name`.
+
+Run SAMS-TCA-Net and all baseline configs sequentially:
+
+```bash
+python scripts/run_models.py
+```
+
+This writes a summary table to `outputs/model_results.csv`. Each model keeps its own artifacts, for example `outputs/baselines/simple_cnn_1d/`.
+
+## Ablations
+
+SAMS-TCA-Net ablation flags are configured under `model`:
+
+```yaml
+use_sensor_attention: true
+use_scale_attention: true
+use_temporal_channel_attention: true
+use_class_aware_pooling: true
+```
+
+When `use_class_aware_pooling` is `false`, the model uses global average pooling plus a linear classifier.
+
+Run all ablation configs and save metrics to `outputs/ablation_results.csv`:
+
+```bash
+python scripts/run_ablations.py
+```
+
 ## Evaluate
 
 ```bash
-python -m src.evaluate --config configs/sams_tca.yaml --checkpoint outputs/sams_tca_net.pt
+python -m src.evaluate --config configs/sams_tca.yaml --checkpoint outputs/sams_tca/best.pt
 ```
 
 The evaluation script reports Accuracy, Macro-F1, Weighted-F1, and the confusion matrix.
+
+Evaluation writes:
+
+```text
+outputs/sams_tca/metrics.json
+outputs/sams_tca/confusion_matrix.npy
+outputs/sams_tca/confusion_matrix.png
+outputs/sams_tca/f1_scores.csv
+```
+
+Metrics include the model parameter count.
 
 ## Test
 

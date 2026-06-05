@@ -55,6 +55,37 @@ def compute_train_stats(x: np.ndarray, train_indices: np.ndarray) -> tuple[np.nd
     return mean, std
 
 
+def load_array_pair(
+    data_dir: str | Path,
+    input_file: str = "X.npy",
+    label_file: str = "y.npy",
+    input_layout: str = "ntc",
+    mmap_mode: str | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load arrays and convert inputs to canonical [N, T, C] layout."""
+    data_path = Path(data_dir)
+    x_path = data_path / input_file
+    y_path = data_path / label_file
+    if not x_path.exists() or not y_path.exists():
+        raise FileNotFoundError(f"Expected {x_path} and {y_path}")
+
+    x = np.load(x_path, mmap_mode=mmap_mode)
+    y = np.load(y_path, mmap_mode=mmap_mode)
+    if x.dtype != np.float32:
+        x = x.astype(np.float32)
+    if y.dtype != np.int64:
+        y = y.astype(np.int64)
+    if x.ndim != 3:
+        raise ValueError(f"{input_file} must have 3 dimensions, got {x.shape}")
+    if input_layout == "nct":
+        x = np.transpose(x, (0, 2, 1))
+    elif input_layout != "ntc":
+        raise ValueError("input_layout must be 'ntc' for [N, T, C] or 'nct' for [N, C, T]")
+    if y.ndim != 1 or y.shape[0] != x.shape[0]:
+        raise ValueError(f"{label_file} must have shape [N], got {y.shape} for X shape {x.shape}")
+    return x, y
+
+
 class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
     """Dataset for ``X.npy`` [N, T, C] and ``y.npy`` [N] accelerometer data."""
 
@@ -71,23 +102,26 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         jitter_std: float = 0.01,
         scaling_std: float = 0.1,
         time_mask_ratio: float = 0.05,
+        input_file: str = "X.npy",
+        label_file: str = "y.npy",
+        input_layout: str = "ntc",
+        source_x: np.ndarray | None = None,
+        source_y: np.ndarray | None = None,
+        normalization: str = "train",
+        window_length: int | None = None,
+        crop_mode: str = "none",
+        temporal_stride: int = 1,
+        transform: str = "raw",
     ) -> None:
         super().__init__()
         if split not in {"train", "val", "test"}:
             raise ValueError("split must be one of: train, val, test")
 
         data_path = Path(data_dir)
-        x_path = data_path / "X.npy"
-        y_path = data_path / "y.npy"
-        if not x_path.exists() or not y_path.exists():
-            raise FileNotFoundError(f"Expected {x_path} and {y_path}")
-
-        x = np.load(x_path).astype(np.float32)
-        y = np.load(y_path).astype(np.int64)
-        if x.ndim != 3:
-            raise ValueError(f"X.npy must have shape [N, T, C], got {x.shape}")
-        if y.ndim != 1 or y.shape[0] != x.shape[0]:
-            raise ValueError(f"y.npy must have shape [N], got {y.shape} for X shape {x.shape}")
+        if source_x is None or source_y is None:
+            x, y = load_array_pair(data_path, input_file, label_file, input_layout)
+        else:
+            x, y = source_x, source_y
 
         splits = make_split_indices(x.shape[0], train_ratio, val_ratio, seed)
         split_indices = getattr(splits, split)
@@ -102,16 +136,61 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         self.jitter_std = jitter_std
         self.scaling_std = scaling_std
         self.time_mask_ratio = time_mask_ratio
+        self.split = split
+        self.normalization = normalization
+        self.window_length = window_length
+        self.crop_mode = crop_mode
+        self.temporal_stride = max(1, temporal_stride)
+        self.transform = transform
+
+        if normalization not in {"train", "sample", "none"}:
+            raise ValueError("normalization must be one of: train, sample, none")
+        if crop_mode not in {"none", "center", "random", "random_train_center_eval"}:
+            raise ValueError("crop_mode must be one of: none, center, random, random_train_center_eval")
+        if transform not in {"raw", "diff"}:
+            raise ValueError("transform must be one of: raw, diff")
 
     def __len__(self) -> int:
         return int(self.y.shape[0])
 
     def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
-        x = (self.x[idx] - self.mean.squeeze(0)) / self.std.squeeze(0)
+        x = np.asarray(self.x[idx], dtype=np.float32)
+        x = self._preprocess(x)
         if self.augment:
             x = self._augment(x)
         y = self.y[idx]
         return torch.from_numpy(x.astype(np.float32)), torch.tensor(y, dtype=torch.long)
+
+    def _preprocess(self, x: np.ndarray) -> np.ndarray:
+        """Apply deterministic preprocessing before optional augmentation."""
+        if self.temporal_stride > 1:
+            x = x[:: self.temporal_stride]
+        x = self._crop(x)
+        if self.transform == "diff":
+            x = np.diff(x, axis=0, prepend=x[:1])
+        if self.normalization == "train":
+            x = (x - self.mean.squeeze(0)) / self.std.squeeze(0)
+        elif self.normalization == "sample":
+            mean = x.mean(axis=0, keepdims=True)
+            std = x.std(axis=0, keepdims=True)
+            std = np.where(std < 1e-6, 1.0, std)
+            x = (x - mean) / std
+        return x.astype(np.float32)
+
+    def _crop(self, x: np.ndarray) -> np.ndarray:
+        """Crop a temporal window according to the configured crop mode."""
+        if self.window_length is None or self.window_length <= 0 or self.window_length >= x.shape[0]:
+            return x
+
+        if self.crop_mode == "none":
+            return x
+        if self.crop_mode == "random" or (
+            self.crop_mode == "random_train_center_eval" and self.split == "train"
+        ):
+            start = np.random.randint(0, x.shape[0] - self.window_length + 1)
+        else:
+            start = (x.shape[0] - self.window_length) // 2
+        return x[start : start + self.window_length]
 
     def _augment(self, x: np.ndarray) -> np.ndarray:
         """Apply jitter, scaling, and contiguous time masking."""
@@ -137,13 +216,25 @@ def create_dataloaders(
     val_ratio: float = 0.15,
     seed: int = 42,
     augment: bool = True,
+    input_file: str = "X.npy",
+    label_file: str = "y.npy",
+    input_layout: str = "ntc",
+    normalization: str = "train",
+    window_length: int | None = None,
+    crop_mode: str = "none",
+    temporal_stride: int = 1,
+    transform: str = "raw",
     loader_kwargs: dict[str, Any] | None = None,
 ) -> tuple[DataLoader[tuple[Tensor, Tensor]], DataLoader[tuple[Tensor, Tensor]], DataLoader[tuple[Tensor, Tensor]]]:
     """Create train/val/test DataLoaders sharing train-set normalization."""
     data_path = Path(data_dir)
-    x = np.load(data_path / "X.npy").astype(np.float32)
+    x, y = load_array_pair(data_path, input_file, label_file, input_layout, mmap_mode="r")
     splits = make_split_indices(x.shape[0], train_ratio, val_ratio, seed)
-    mean, std = compute_train_stats(x, splits.train)
+    if normalization == "train":
+        mean, std = compute_train_stats(x, splits.train)
+    else:
+        mean = np.zeros((1, 1, x.shape[-1]), dtype=np.float32)
+        std = np.ones((1, 1, x.shape[-1]), dtype=np.float32)
     kwargs = loader_kwargs or {}
 
     datasets = {
@@ -156,6 +247,16 @@ def create_dataloaders(
             mean=mean,
             std=std,
             augment=augment,
+            input_file=input_file,
+            label_file=label_file,
+            input_layout=input_layout,
+            source_x=x,
+            source_y=y,
+            normalization=normalization,
+            window_length=window_length,
+            crop_mode=crop_mode,
+            temporal_stride=temporal_stride,
+            transform=transform,
         )
         for split in ("train", "val", "test")
     }

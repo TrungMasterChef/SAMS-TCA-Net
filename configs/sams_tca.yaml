@@ -1,25 +1,50 @@
 seed: 42
-
 model:
-  num_channels: 3
-  num_classes: 4
+  name: sams_tca
+  num_channels: 27
+  num_classes: 17
   hidden_channels: 64
   num_blocks: 4
   dropout: 0.1
-
+  input_layout: btc
+  use_sensor_attention: true
+  use_scale_attention: true
+  use_temporal_channel_attention: true
+  use_class_aware_pooling: true
 data:
-  data_dir: data/Z24-dataset-processed
-  seq_len: 256
+  data_dir: src/data/Z24-dataset-processed
+  input_file: inputs.npy
+  label_file: labels.npy
+  input_layout: nct
+  seq_len: 6000
+  normalization: sample
+  window_length: 1024
+  crop_mode: random_train_center_eval
+  temporal_stride: 1
+  transform: diff
   train_ratio: 0.7
   val_ratio: 0.15
   num_workers: 0
   augment: true
   dummy_samples: 128
-
 training:
   batch_size: 16
   epochs: 10
   learning_rate: 0.001
   weight_decay: 0.0001
   device: auto
-  checkpoint_path: outputs/sams_tca_net.pt
+  best_checkpoint_path: outputs/sams_tca/best.pt
+  last_checkpoint_path: outputs/sams_tca/last.pt
+  checkpoint_path: outputs/sams_tca/best.pt
+  history_path: outputs/sams_tca/history.csv
+  training_log_path: outputs/sams_tca/training_log.txt
+  metrics_path: outputs/sams_tca/metrics.json
+  confusion_matrix_npy_path: outputs/sams_tca/confusion_matrix.npy
+  confusion_matrix_png_path: outputs/sams_tca/confusion_matrix.png
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.0
+  history_plot_path: outputs/sams_tca/history.png
+  f1_scores_path: outputs/sams_tca/f1_scores.csv
+  val_confusion_matrix_npy_path: outputs/sams_tca/val_confusion_matrix.npy
+  val_confusion_matrix_png_path: outputs/sams_tca/val_confusion_matrix.png
+  val_f1_scores_path: outputs/sams_tca/val_f1_scores.csv
