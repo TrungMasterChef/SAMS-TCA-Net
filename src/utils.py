@@ -186,6 +186,20 @@ def save_confusion_matrix_png(path: str | Path, confusion: np.ndarray) -> None:
     ax.set_title("Confusion Matrix")
     ax.set_xticks(np.arange(confusion.shape[1]))
     ax.set_yticks(np.arange(confusion.shape[0]))
+    threshold = confusion.max() / 2.0 if confusion.size and confusion.max() > 0 else 0.0
+    for row in range(confusion.shape[0]):
+        for col in range(confusion.shape[1]):
+            value = int(confusion[row, col])
+            text_color = "white" if value > threshold else "black"
+            ax.text(
+                col,
+                row,
+                str(value),
+                ha="center",
+                va="center",
+                color=text_color,
+                fontsize=8,
+            )
     fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
     fig.tight_layout()
     fig.savefig(output_path, dpi=150)
