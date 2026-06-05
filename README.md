@@ -44,30 +44,30 @@ The dataset class creates deterministic train/val/test splits, computes mean/std
 
 Augmentation options for training include jitter, scaling, and time masking.
 
-The default configs now follow the Z24 preprocessing protocol used in the referenced SpectralTCN code:
+The default configs use the crop-based preprocessing protocol:
 
 ```yaml
-normalization: train
-window_mode: sliding
-window_length: 1024
+normalization: sample
+window_mode: crop
+window_length: 2048
 hop_length: 512
-crop_mode: none
+crop_mode: random_train_center_eval
 temporal_stride: 1
-taper: hann
-bandpass_filter: true
+taper: none
+bandpass_filter: false
 sampling_rate: 100.0
 lowcut: 0.5
 highcut: 40.0
 filter_order: 4
-transform: raw
-eval_num_crops: 1
+transform: raw_diff
+eval_num_crops: 5
 ```
 
-This applies a zero-phase Butterworth bandpass filter, normalizes by train-split channel statistics, and converts each 6000-step sequence into 1024-sample windows with 50% overlap and Hann tapering. The default configs use `model.num_channels: 27`.
+This trains on random 2048-sample windows, evaluates with five deterministic crops averaged at logit level, normalizes each sample/window independently, and concatenates raw signals with temporal differences. Because `raw_diff` doubles the channel count, the default configs use `model.num_channels: 54`.
 
 The default SAMS-TCA-Net config also uses GroupNorm, label smoothing, gradient clipping, and ReduceLROnPlateau scheduling on validation Macro-F1 to reduce validation instability.
 
-Splits are stratified by label at the original sequence level before sliding-window expansion. Training augmentation is configurable through:
+Splits are stratified by label at the original sequence level before crop/window extraction. Training augmentation is configurable through:
 
 ```yaml
 augment: true

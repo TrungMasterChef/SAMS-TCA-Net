@@ -1,7 +1,7 @@
 seed: 42
 model:
   name: sams_tca
-  num_channels: 27
+  num_channels: 54
   num_classes: 17
   hidden_channels: 64
   num_blocks: 4
@@ -17,21 +17,21 @@ data:
   label_file: labels.npy
   input_layout: nct
   seq_len: 6000
-  normalization: train
-  window_length: 1024
-  crop_mode: none
+  normalization: sample
+  window_length: 2048
+  crop_mode: random_train_center_eval
   temporal_stride: 1
-  transform: raw
+  transform: raw_diff
   train_ratio: 0.7
   val_ratio: 0.15
   num_workers: 0
   augment: true
   dummy_samples: 128
-  eval_num_crops: 1
-  window_mode: sliding
+  eval_num_crops: 5
+  window_mode: crop
   hop_length: 512
-  taper: hann
-  bandpass_filter: true
+  taper: none
+  bandpass_filter: false
   sampling_rate: 100.0
   lowcut: 0.5
   highcut: 40.0
