@@ -172,38 +172,111 @@ def save_json(path: str | Path, payload: dict[str, Any]) -> None:
         json.dump(payload, f, indent=2)
 
 
-def save_confusion_matrix_png(path: str | Path, confusion: np.ndarray) -> None:
-    """Save a confusion matrix heatmap as a PNG image."""
+# Shared matplotlib style for SCIE-grade publication figures.
+_PAPER_STYLE: dict[str, Any] = {
+    "figure.dpi": 120,
+    "savefig.dpi": 300,
+    "figure.facecolor": "white",
+    "savefig.facecolor": "white",
+    "axes.facecolor": "white",
+    "axes.edgecolor": "#333333",
+    "axes.linewidth": 0.9,
+    "axes.titlesize": 13,
+    "axes.titleweight": "bold",
+    "axes.labelsize": 12,
+    "xtick.labelsize": 9.5,
+    "ytick.labelsize": 9.5,
+    "xtick.major.width": 0.8,
+    "ytick.major.width": 0.8,
+    "legend.fontsize": 9.5,
+    "legend.frameon": False,
+    "font.family": "DejaVu Sans",
+    "mathtext.default": "regular",
+    "axes.unicode_minus": False,
+}
+
+# Distinct, colour-blind-friendly accents for train/validation curves.
+_TRAIN_COLOR = "#0072B2"
+_VAL_COLOR = "#D55E00"
+_BEST_COLOR = "#009E73"
+
+
+def _resolve_class_names(class_names: list[str] | None, count: int) -> list[str]:
+    """Return string labels for each class, defaulting to integer indices."""
+    if class_names is not None:
+        return [str(name) for name in class_names]
+    return [str(index) for index in range(count)]
+
+
+def save_confusion_matrix_png(
+    path: str | Path,
+    confusion: np.ndarray,
+    class_names: list[str] | None = None,
+    normalize: bool = True,
+    title: str = "Confusion matrix",
+) -> None:
+    """Save an annotated confusion-matrix heatmap as a PNG image.
+
+    Cells are coloured by per-true-class proportion (so the diagonal stays
+    legible regardless of class support) while the annotation shows the raw
+    count. Set ``normalize=False`` to colour by raw counts instead.
+    """
     import matplotlib.pyplot as plt
+    from matplotlib.colors import Normalize
 
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig_size = max(6, min(14, confusion.shape[0] * 0.6))
-    fig, ax = plt.subplots(figsize=(fig_size, fig_size))
-    image = ax.imshow(confusion, interpolation="nearest", cmap="Blues")
-    ax.set_xlabel("Predicted label")
-    ax.set_ylabel("True label")
-    ax.set_title("Confusion Matrix")
-    ax.set_xticks(np.arange(confusion.shape[1]))
-    ax.set_yticks(np.arange(confusion.shape[0]))
-    threshold = confusion.max() / 2.0 if confusion.size and confusion.max() > 0 else 0.0
-    for row in range(confusion.shape[0]):
-        for col in range(confusion.shape[1]):
-            value = int(confusion[row, col])
-            text_color = "white" if value > threshold else "black"
-            ax.text(
-                col,
-                row,
-                str(value),
-                ha="center",
-                va="center",
-                color=text_color,
-                fontsize=8,
-            )
-    fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
+    confusion = np.asarray(confusion)
+    num_classes = confusion.shape[0]
+    names = _resolve_class_names(class_names, num_classes)
+
+    row_sums = confusion.sum(axis=1, keepdims=True)
+    normalized = np.divide(
+        confusion, row_sums, out=np.zeros(confusion.shape, dtype=float), where=row_sums != 0
+    )
+    color_data = normalized if normalize else confusion.astype(float)
+    total = int(confusion.sum())
+    accuracy = float(np.trace(confusion) / total) if total > 0 else 0.0
+
+    with plt.rc_context(_PAPER_STYLE):
+        size = max(5.5, min(15.0, 2.2 + num_classes * 0.55))
+        fig, ax = plt.subplots(figsize=(size, size * 0.86), constrained_layout=True)
+        norm = Normalize(vmin=0.0, vmax=1.0) if normalize else None
+        image = ax.imshow(color_data, interpolation="nearest", cmap="Blues", norm=norm)
+
+        ax.set_title(f"{title}  (overall accuracy = {accuracy * 100:.1f}%, N = {total})")
+        ax.set_xlabel("Predicted class")
+        ax.set_ylabel("True class")
+        ax.set_xticks(np.arange(num_classes))
+        ax.set_yticks(np.arange(num_classes))
+        rotation = 45 if max(len(name) for name in names) > 2 else 0
+        ax.set_xticklabels(names, rotation=rotation, ha="right" if rotation else "center")
+        ax.set_yticklabels(names)
+
+        ax.set_xticks(np.arange(-0.5, num_classes, 1), minor=True)
+        ax.set_yticks(np.arange(-0.5, num_classes, 1), minor=True)
+        ax.grid(which="minor", color="white", linewidth=0.6)
+        ax.tick_params(which="minor", length=0)
+        ax.tick_params(which="major", length=2)
+
+        fontsize = max(5.0, min(9.0, 120.0 / num_classes))
+        threshold = 0.55 if normalize else (confusion.max() / 2.0 if confusion.max() > 0 else 0.0)
+        for row in range(num_classes):
+            for col in range(num_classes):
+                count = int(confusion[row, col])
+                if count == 0:
+                    continue
+                text_color = "white" if color_data[row, col] > threshold else "#222222"
+                ax.text(col, row, str(count), ha="center", va="center", color=text_color, fontsize=fontsize)
+
+        colorbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.02)
+        colorbar.outline.set_linewidth(0.6)
+        colorbar.ax.tick_params(labelsize=8.5, width=0.6)
+        colorbar.set_label("Row-normalised proportion" if normalize else "Count", fontsize=10)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        fig.savefig(output_path)
+        plt.close(fig)
 
 
 def compute_multiclass_auc(
@@ -257,7 +330,12 @@ def save_roc_curve_png(
     probabilities: np.ndarray,
     num_classes: int,
 ) -> None:
-    """Save one-vs-rest ROC curves for every class and the micro-average."""
+    """Save one-vs-rest ROC curves with macro- and micro-averages.
+
+    Per-class curves are drawn faintly to convey spread; the macro- and
+    micro-averages are emphasised. This keeps the figure readable for many
+    classes instead of using a rainbow of distinct colours.
+    """
     import matplotlib.pyplot as plt
     from sklearn.metrics import auc, roc_curve
 
@@ -265,35 +343,64 @@ def save_roc_curve_png(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     y_one_hot = np.eye(num_classes, dtype=np.int64)[y_true]
 
-    fig, ax = plt.subplots(figsize=(8, 7))
-    for class_id in range(num_classes):
-        positives = y_one_hot[:, class_id].sum()
-        negatives = y_one_hot.shape[0] - positives
-        if positives == 0 or negatives == 0:
-            continue
-        fpr, tpr, _ = roc_curve(y_one_hot[:, class_id], probabilities[:, class_id])
-        ax.plot(fpr, tpr, linewidth=1.0, alpha=0.75, label=f"class {class_id} AUC={auc(fpr, tpr):.3f}")
+    with plt.rc_context(_PAPER_STYLE):
+        fig, ax = plt.subplots(figsize=(6.4, 6.0), constrained_layout=True)
+        fpr_grid = np.linspace(0.0, 1.0, 256)
+        interpolated_tpr = np.zeros_like(fpr_grid)
+        class_aucs: list[float] = []
+        valid_classes = 0
+        per_class_handle = None
+        for class_id in range(num_classes):
+            positives = y_one_hot[:, class_id].sum()
+            negatives = y_one_hot.shape[0] - positives
+            if positives == 0 or negatives == 0:
+                continue
+            fpr, tpr, _ = roc_curve(y_one_hot[:, class_id], probabilities[:, class_id])
+            class_aucs.append(auc(fpr, tpr))
+            (per_class_handle,) = ax.plot(fpr, tpr, linewidth=0.7, alpha=0.30, color="#7f8c8d")
+            interpolated_tpr += np.interp(fpr_grid, fpr, tpr)
+            valid_classes += 1
 
-    try:
-        fpr_micro, tpr_micro, _ = roc_curve(y_one_hot.ravel(), probabilities.ravel())
-        ax.plot(
-            fpr_micro,
-            tpr_micro,
-            color="black",
-            linewidth=2.0,
-            label=f"micro AUC={auc(fpr_micro, tpr_micro):.3f}",
-        )
-    except ValueError:
-        pass
+        if per_class_handle is not None:
+            per_class_handle.set_label(f"per-class (n = {valid_classes})")
 
-    ax.plot([0, 1], [0, 1], linestyle="--", color="gray", linewidth=1.0)
-    ax.set_xlabel("False Positive Rate")
-    ax.set_ylabel("True Positive Rate")
-    ax.set_title("One-vs-Rest ROC Curves")
-    ax.legend(loc="lower right", fontsize=7, ncol=2)
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
+        if valid_classes > 0:
+            macro_tpr = interpolated_tpr / valid_classes
+            macro_tpr[0], macro_tpr[-1] = 0.0, 1.0
+            ax.plot(
+                fpr_grid,
+                macro_tpr,
+                color=_BEST_COLOR,
+                linewidth=2.4,
+                linestyle="--",
+                label=f"macro-average (AUC = {auc(fpr_grid, macro_tpr):.3f})",
+            )
+
+        try:
+            fpr_micro, tpr_micro, _ = roc_curve(y_one_hot.ravel(), probabilities.ravel())
+            ax.plot(
+                fpr_micro,
+                tpr_micro,
+                color=_TRAIN_COLOR,
+                linewidth=2.4,
+                label=f"micro-average (AUC = {auc(fpr_micro, tpr_micro):.3f})",
+            )
+        except ValueError:
+            pass
+
+        ax.plot([0, 1], [0, 1], linestyle=":", color="#999999", linewidth=1.1, label="chance")
+        ax.set_xlim(-0.01, 1.0)
+        ax.set_ylim(0.0, 1.02)
+        ax.set_aspect("equal")
+        ax.set_xlabel("False positive rate")
+        ax.set_ylabel("True positive rate")
+        ax.set_title("ROC curves (one-vs-rest)")
+        ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.5)
+        ax.legend(loc="lower right", handlelength=1.8)
+        for spine in ("top", "right"):
+            ax.spines[spine].set_visible(False)
+        fig.savefig(output_path)
+        plt.close(fig)
 
 
 def save_tsne_png(
@@ -328,27 +435,49 @@ def save_tsne_png(
         random_state=seed,
     ).fit_transform(features)
 
-    fig, ax = plt.subplots(figsize=(8, 7))
-    scatter = ax.scatter(
-        embedding[:, 0],
-        embedding[:, 1],
-        c=labels,
-        cmap="tab20",
-        s=12,
-        alpha=0.8,
-        linewidths=0,
-    )
-    ax.set_title("t-SNE of Model Logits")
-    ax.set_xticks([])
-    ax.set_yticks([])
-    fig.colorbar(scatter, ax=ax, label="Class")
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
+    classes = np.unique(labels)
+    qualitative = len(classes) <= 20
+    cmap = plt.get_cmap("tab20" if qualitative else "gist_ncar")
+
+    with plt.rc_context(_PAPER_STYLE):
+        fig, ax = plt.subplots(figsize=(7.2, 6.0), constrained_layout=True)
+        for order, class_id in enumerate(classes):
+            mask = labels == class_id
+            color = cmap(order) if qualitative else cmap(order / max(1, len(classes) - 1))
+            ax.scatter(
+                embedding[mask, 0],
+                embedding[mask, 1],
+                s=18,
+                color=color,
+                label=str(int(class_id)),
+                alpha=0.85,
+                edgecolors="white",
+                linewidths=0.25,
+            )
+        ax.set_title(f"t-SNE of learned features ({len(classes)} classes, n = {features.shape[0]})")
+        ax.set_xlabel("t-SNE dimension 1")
+        ax.set_ylabel("t-SNE dimension 2")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.legend(
+            title="Class",
+            loc="center left",
+            bbox_to_anchor=(1.01, 0.5),
+            fontsize=8,
+            title_fontsize=9,
+            ncol=1 if len(classes) <= 12 else 2,
+            handletextpad=0.3,
+            columnspacing=0.8,
+            frameon=False,
+        )
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#cccccc")
+        fig.savefig(output_path)
+        plt.close(fig)
 
 
 def save_history_plots(path: str | Path, rows: list[dict[str, Any]]) -> None:
-    """Save train/validation loss, accuracy, and macro-F1 curves."""
+    """Save train/validation loss, accuracy, macro-F1, and MCC curves."""
     if not rows:
         return
     import matplotlib.pyplot as plt
@@ -357,28 +486,53 @@ def save_history_plots(path: str | Path, rows: list[dict[str, Any]]) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     epochs = [row["epoch"] for row in rows]
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-    axes[0].plot(epochs, [row["train_loss"] for row in rows], label="train")
-    axes[0].plot(epochs, [row["val_loss"] for row in rows], label="valid")
-    axes[0].set_title("Loss")
-    axes[0].set_xlabel("Epoch")
-    axes[0].legend()
+    def series(key: str) -> list[float] | None:
+        return [row[key] for row in rows] if key in rows[0] else None
 
-    axes[1].plot(epochs, [row["train_accuracy"] for row in rows], label="train")
-    axes[1].plot(epochs, [row["val_accuracy"] for row in rows], label="valid")
-    axes[1].set_title("Accuracy")
-    axes[1].set_xlabel("Epoch")
-    axes[1].legend()
+    panels = [
+        ("Loss", "train_loss", "val_loss"),
+        ("Accuracy", "train_accuracy", "val_accuracy"),
+        ("Macro-F1", "train_macro_f1", "val_macro_f1"),
+        ("MCC", "train_mcc", "val_mcc"),
+    ]
+    panels = [panel for panel in panels if series(panel[2]) is not None]
+    val_macro_f1 = series("val_macro_f1")
+    best_index = int(np.argmax(val_macro_f1)) if val_macro_f1 else None
 
-    axes[2].plot(epochs, [row["train_macro_f1"] for row in rows], label="train")
-    axes[2].plot(epochs, [row["val_macro_f1"] for row in rows], label="valid")
-    axes[2].set_title("Macro-F1")
-    axes[2].set_xlabel("Epoch")
-    axes[2].legend()
+    with plt.rc_context(_PAPER_STYLE):
+        fig, axes = plt.subplots(2, 2, figsize=(11, 7.5), constrained_layout=True)
+        flat_axes = axes.ravel()
+        for index, (title, train_key, val_key) in enumerate(panels):
+            ax = flat_axes[index]
+            train_series = series(train_key)
+            if train_series is not None:
+                ax.plot(epochs, train_series, color=_TRAIN_COLOR, marker="o", markersize=2.5, linewidth=1.6, label="train")
+            ax.plot(epochs, series(val_key), color=_VAL_COLOR, marker="s", markersize=2.5, linewidth=1.6, label="validation")
+            if best_index is not None:
+                ax.axvline(epochs[best_index], color=_BEST_COLOR, linestyle="--", linewidth=1.1, alpha=0.8)
+            ax.set_title(title)
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel(title)
+            ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.6)
+            ax.legend(frameon=False, loc="best")
+            for spine in ("top", "right"):
+                ax.spines[spine].set_visible(False)
+            if title == "Macro-F1" and best_index is not None and val_macro_f1 is not None:
+                ax.annotate(
+                    f"best = {val_macro_f1[best_index]:.3f}\n@ epoch {epochs[best_index]}",
+                    xy=(epochs[best_index], val_macro_f1[best_index]),
+                    xytext=(0.5, 0.12),
+                    textcoords="axes fraction",
+                    fontsize=9,
+                    arrowprops=dict(arrowstyle="->", color=_BEST_COLOR),
+                )
 
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
+        for index in range(len(panels), len(flat_axes)):
+            flat_axes[index].axis("off")
+
+        fig.suptitle("Training history", fontsize=14, fontweight="bold")
+        fig.savefig(output_path)
+        plt.close(fig)
 
 
 def save_checkpoint(

@@ -22,6 +22,7 @@ def run_ablations(config_dir: str | Path, output_csv: str | Path) -> None:
         raise FileNotFoundError(f"No ablation configs found in {config_dir}")
 
     rows: list[dict[str, object]] = []
+    flag_names: list[str] = []
     for config_path in config_paths:
         variant = config_path.stem
         print(f"Running ablation: {variant}")
@@ -31,6 +32,10 @@ def run_ablations(config_dir: str | Path, output_csv: str | Path) -> None:
         checkpoint_path = config["training"].get("checkpoint_path")
         metrics = evaluate(str(config_path), checkpoint_path)
         model_cfg = config["model"]
+        ablation_flags = {key: value for key, value in model_cfg.items() if isinstance(value, bool)}
+        for key in ablation_flags:
+            if key not in flag_names:
+                flag_names.append(key)
         rows.append(
             {
                 "variant": variant,
@@ -43,20 +48,15 @@ def run_ablations(config_dir: str | Path, output_csv: str | Path) -> None:
                 "roc_auc_micro": metrics["roc_auc_micro"],
                 "roc_auc_weighted": metrics["roc_auc_weighted"],
                 "parameter_count": metrics["parameter_count"],
-                "use_sensor_attention": model_cfg.get("use_sensor_attention", True),
-                "use_scale_attention": model_cfg.get("use_scale_attention", True),
-                "use_temporal_channel_attention": model_cfg.get(
-                    "use_temporal_channel_attention",
-                    True,
-                ),
-                "use_class_aware_pooling": model_cfg.get("use_class_aware_pooling", True),
+                **ablation_flags,
             }
         )
 
+    fieldnames = [key for key in rows[0] if key not in flag_names] + flag_names
     output_path = Path(output_csv)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer = csv.DictWriter(f, fieldnames=fieldnames, restval="")
         writer.writeheader()
         writer.writerows(rows)
     print(f"Saved ablation results to {output_path}")

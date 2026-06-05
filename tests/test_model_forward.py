@@ -53,7 +53,20 @@ def test_baseline_forward_bct_shape() -> None:
 
 
 def test_model_factory_builds_every_model() -> None:
-    for name in ["sams_tca", "simple_cnn_1d", "fcn_1d", "resnet_1d", "inception_time_baseline"]:
+    names = [
+        "sams_tca",
+        "msca_net",
+        "agb_net",
+        "simple_cnn_1d",
+        "fcn_1d",
+        "resnet_1d",
+        "inception_time_baseline",
+        "mlp_1d",
+        "lstm_1d",
+        "tcn_1d",
+        "transformer",
+    ]
+    for name in names:
         model = build_model(
             {
                 "name": name,
@@ -61,6 +74,7 @@ def test_model_factory_builds_every_model() -> None:
                 "num_classes": 5,
                 "hidden_channels": 16,
                 "num_blocks": 2,
+                "num_heads": 2,
                 "dropout": 0.1,
             }
         )

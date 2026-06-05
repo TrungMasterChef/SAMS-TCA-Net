@@ -17,3 +17,12 @@ outputs/*.json
 outputs/*.npy
 outputs/*.png
 outputs/*.txt
+
+# LaTeX build artifacts (keep sources + figures + main.pdf)
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+paper/*.toc
+paper/*.synctex.gz
