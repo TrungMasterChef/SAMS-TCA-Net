@@ -1,0 +1,25 @@
+seed: 42
+
+model:
+  num_channels: 3
+  num_classes: 4
+  hidden_channels: 64
+  num_blocks: 4
+  dropout: 0.1
+
+data:
+  data_dir: data/Z24-dataset-processed
+  seq_len: 256
+  train_ratio: 0.7
+  val_ratio: 0.15
+  num_workers: 0
+  augment: true
+  dummy_samples: 128
+
+training:
+  batch_size: 16
+  epochs: 10
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  device: auto
+  checkpoint_path: outputs/sams_tca_net.pt
