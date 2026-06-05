@@ -49,8 +49,8 @@ The default configs use the crop-based preprocessing protocol:
 ```yaml
 normalization: sample
 window_mode: crop
-window_length: 2048
-hop_length: 512
+window_length: 768
+hop_length: 384
 crop_mode: random_train_center_eval
 temporal_stride: 1
 taper: none
@@ -59,11 +59,11 @@ sampling_rate: 100.0
 lowcut: 0.5
 highcut: 40.0
 filter_order: 4
-transform: raw_diff
-eval_num_crops: 5
+transform: diff
+eval_num_crops: 7
 ```
 
-This trains on random 2048-sample windows, evaluates with five deterministic crops averaged at logit level, normalizes each sample/window independently, and concatenates raw signals with temporal differences. Because `raw_diff` doubles the channel count, the default configs use `model.num_channels: 54`.
+This trains on short random 768-sample windows, evaluates with seven deterministic crops averaged at logit level, normalizes each sample/window independently, and uses temporal differences rather than raw amplitude. The default configs use `model.num_channels: 27`.
 
 The default SAMS-TCA-Net config also uses GroupNorm, label smoothing, gradient clipping, and ReduceLROnPlateau scheduling on validation Macro-F1 to reduce validation instability.
 
@@ -71,10 +71,13 @@ Splits are stratified by label at the original sequence level before crop/window
 
 ```yaml
 augment: true
-jitter_std: 0.005
-scaling_std: 0.05
-time_mask_ratio: 0.02
+jitter_std: 0.01
+scaling_std: 0.08
+time_mask_ratio: 0.05
+channel_mask_ratio: 0.15
 ```
+
+This harder protocol reduces direct amplitude cues and randomly masks some sensor axes during training. It is intended to stress simple local CNN baselines and make sensor-axis and temporal-channel attention more useful.
 
 ## Train
 

@@ -228,6 +228,7 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         jitter_std: float = 0.01,
         scaling_std: float = 0.1,
         time_mask_ratio: float = 0.05,
+        channel_mask_ratio: float = 0.0,
         input_file: str = "X.npy",
         label_file: str = "y.npy",
         input_layout: str = "ntc",
@@ -273,6 +274,7 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         self.jitter_std = jitter_std
         self.scaling_std = scaling_std
         self.time_mask_ratio = time_mask_ratio
+        self.channel_mask_ratio = channel_mask_ratio
         self.split = split
         self.normalization = normalization
         self.window_length = window_length
@@ -394,7 +396,7 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         return x[start : start + self.window_length]
 
     def _augment(self, x: np.ndarray) -> np.ndarray:
-        """Apply jitter, scaling, and contiguous time masking."""
+        """Apply jitter, scaling, time masking, and channel masking."""
         if self.jitter_std > 0:
             x = x + np.random.normal(0.0, self.jitter_std, size=x.shape).astype(np.float32)
         if self.scaling_std > 0:
@@ -406,6 +408,12 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
                 start = np.random.randint(0, x.shape[0] - mask_len + 1)
                 x = x.copy()
                 x[start : start + mask_len, :] = 0.0
+        if self.channel_mask_ratio > 0:
+            mask_count = int(round(x.shape[-1] * self.channel_mask_ratio))
+            if 0 < mask_count < x.shape[-1]:
+                channels = np.random.choice(x.shape[-1], size=mask_count, replace=False)
+                x = x.copy()
+                x[:, channels] = 0.0
         return x
 
 
@@ -438,6 +446,7 @@ def create_dataloaders(
     jitter_std: float = 0.01,
     scaling_std: float = 0.1,
     time_mask_ratio: float = 0.05,
+    channel_mask_ratio: float = 0.0,
     loader_kwargs: dict[str, Any] | None = None,
 ) -> tuple[DataLoader[tuple[Tensor, Tensor]], DataLoader[tuple[Tensor, Tensor]], DataLoader[tuple[Tensor, Tensor]]]:
     """Create train/val/test DataLoaders sharing train-set normalization."""
@@ -474,6 +483,7 @@ def create_dataloaders(
             jitter_std=jitter_std,
             scaling_std=scaling_std,
             time_mask_ratio=time_mask_ratio,
+            channel_mask_ratio=channel_mask_ratio,
             input_file=input_file,
             label_file=label_file,
             input_layout=input_layout,

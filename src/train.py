@@ -51,6 +51,7 @@ def build_dataloaders(config: dict) -> tuple:
             jitter_std=float(data_cfg.get("jitter_std", 0.01)),
             scaling_std=float(data_cfg.get("scaling_std", 0.1)),
             time_mask_ratio=float(data_cfg.get("time_mask_ratio", 0.05)),
+            channel_mask_ratio=float(data_cfg.get("channel_mask_ratio", 0.0)),
             input_file=input_file,
             label_file=label_file,
             input_layout=str(data_cfg.get("input_layout", "ntc")),

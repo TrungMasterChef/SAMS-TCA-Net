@@ -157,3 +157,29 @@ def test_stratified_split_balances_each_class() -> None:
     assert np.bincount(labels[splits.train], minlength=4).tolist() == [6, 6, 6, 6]
     assert np.bincount(labels[splits.val], minlength=4).tolist() == [2, 2, 2, 2]
     assert np.bincount(labels[splits.test], minlength=4).tolist() == [2, 2, 2, 2]
+
+
+def test_channel_mask_augmentation_masks_some_channels(tmp_path: Path) -> None:
+    x = np.ones((20, 3, 32), dtype=np.float32)
+    y = np.arange(20, dtype=np.int64) % 4
+    np.save(tmp_path / "inputs.npy", x)
+    np.save(tmp_path / "labels.npy", y)
+
+    dataset = Z24AccelerationDataset(
+        tmp_path,
+        split="train",
+        input_file="inputs.npy",
+        label_file="labels.npy",
+        input_layout="nct",
+        normalization="none",
+        window_length=16,
+        crop_mode="center",
+        augment=True,
+        jitter_std=0.0,
+        scaling_std=0.0,
+        time_mask_ratio=0.0,
+        channel_mask_ratio=1 / 3,
+    )
+    sample_x, _ = dataset[0]
+    assert sample_x.shape == (16, 3)
+    assert (sample_x.sum(dim=0) == 0).sum().item() == 1
