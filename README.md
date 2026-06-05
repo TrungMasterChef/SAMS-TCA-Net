@@ -44,18 +44,26 @@ The dataset class creates deterministic train/val/test splits, computes mean/std
 
 Augmentation options for training include jitter, scaling, and time masking.
 
-The default configs intentionally use a harder preprocessing protocol:
+The default configs now follow the Z24 preprocessing protocol used in the referenced SpectralTCN code:
 
 ```yaml
-normalization: sample
-window_length: 2048
-crop_mode: random_train_center_eval
+normalization: train
+window_mode: sliding
+window_length: 1024
+hop_length: 512
+crop_mode: none
 temporal_stride: 1
-transform: raw_diff
-eval_num_crops: 5
+taper: hann
+bandpass_filter: true
+sampling_rate: 100.0
+lowcut: 0.5
+highcut: 40.0
+filter_order: 4
+transform: raw
+eval_num_crops: 1
 ```
 
-This trains on random windows instead of the full 6000-step signal, evaluates with five deterministic crops averaged at logit level, removes per-sample offset/scale cues, and concatenates raw signals with temporal differences. Because `raw_diff` doubles the channel count, the default configs use `model.num_channels: 54`. To return to the easier full-signal setup, set `normalization: train`, `crop_mode: none`, `transform: raw`, `eval_num_crops: 1`, and `model.num_channels: 27`.
+This applies a zero-phase Butterworth bandpass filter, normalizes by train-split channel statistics, and converts each 6000-step sequence into 1024-sample windows with 50% overlap and Hann tapering. The default configs use `model.num_channels: 27`.
 
 The default SAMS-TCA-Net config also uses GroupNorm, label smoothing, gradient clipping, and ReduceLROnPlateau scheduling on validation Macro-F1 to reduce validation instability.
 

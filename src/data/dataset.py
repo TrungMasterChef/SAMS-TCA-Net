@@ -11,6 +11,12 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
+try:
+    from scipy.signal import butter, sosfiltfilt
+except ImportError:  # pragma: no cover - exercised only when scipy is unavailable.
+    butter = None
+    sosfiltfilt = None
+
 
 @dataclass(frozen=True)
 class SplitIndices:
@@ -53,6 +59,68 @@ def compute_train_stats(x: np.ndarray, train_indices: np.ndarray) -> tuple[np.nd
     std = train_x.std(axis=(0, 1), keepdims=True).astype(np.float32)
     std = np.where(std < 1e-6, 1.0, std)
     return mean, std
+
+
+def compute_filtered_train_stats(
+    x: np.ndarray,
+    train_indices: np.ndarray,
+    sampling_rate: float,
+    lowcut: float,
+    highcut: float,
+    filter_order: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute train statistics after bandpass filtering."""
+    total_sum: np.ndarray | None = None
+    total_sq_sum: np.ndarray | None = None
+    total_count = 0
+    for idx in train_indices:
+        filtered = apply_bandpass_filter(x[idx], sampling_rate, lowcut, highcut, filter_order)
+        sample_sum = filtered.sum(axis=0, keepdims=True)
+        sample_sq_sum = np.square(filtered).sum(axis=0, keepdims=True)
+        total_sum = sample_sum if total_sum is None else total_sum + sample_sum
+        total_sq_sum = sample_sq_sum if total_sq_sum is None else total_sq_sum + sample_sq_sum
+        total_count += filtered.shape[0]
+    if total_sum is None or total_sq_sum is None or total_count == 0:
+        raise ValueError("Cannot compute train statistics from an empty split")
+    mean = (total_sum / total_count)[None, ...].astype(np.float32)
+    variance = (total_sq_sum / total_count) - np.square(total_sum / total_count)
+    std = np.sqrt(np.maximum(variance, 1e-6))[None, ...].astype(np.float32)
+    std = np.where(std < 1e-6, 1.0, std)
+    return mean, std
+
+
+def make_window_starts(length: int, window_length: int, hop_length: int) -> list[int]:
+    """Create sliding-window start indices."""
+    if window_length <= 0:
+        raise ValueError("window_length must be positive")
+    if hop_length <= 0:
+        raise ValueError("hop_length must be positive")
+    if window_length >= length:
+        return [0]
+    starts = list(range(0, length - window_length + 1, hop_length))
+    last_start = length - window_length
+    if starts[-1] != last_start:
+        starts.append(last_start)
+    return starts
+
+
+def apply_bandpass_filter(
+    x: np.ndarray,
+    sampling_rate: float,
+    lowcut: float,
+    highcut: float,
+    order: int = 4,
+) -> np.ndarray:
+    """Apply zero-phase Butterworth bandpass filtering along time."""
+    if butter is None or sosfiltfilt is None:
+        raise ImportError("scipy is required for bandpass filtering. Install scipy or set bandpass_filter: false")
+    nyquist = sampling_rate * 0.5
+    low = lowcut / nyquist
+    high = highcut / nyquist
+    if not 0 < low < high < 1:
+        raise ValueError("Bandpass cutoffs must satisfy 0 < lowcut < highcut < sampling_rate / 2")
+    sos = butter(order, [low, high], btype="bandpass", output="sos")
+    return sosfiltfilt(sos, x, axis=0).astype(np.float32)
 
 
 def load_array_pair(
@@ -113,6 +181,14 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         temporal_stride: int = 1,
         transform: str = "raw",
         eval_num_crops: int = 1,
+        window_mode: str = "crop",
+        hop_length: int | None = None,
+        taper: str = "none",
+        bandpass_filter: bool = False,
+        sampling_rate: float = 100.0,
+        lowcut: float = 0.5,
+        highcut: float = 40.0,
+        filter_order: int = 4,
     ) -> None:
         super().__init__()
         if split not in {"train", "val", "test"}:
@@ -131,6 +207,7 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
 
         self.x = x[split_indices]
         self.y = y[split_indices]
+        self.items: list[tuple[int, int]] | None = None
         self.mean = mean.astype(np.float32)
         self.std = std.astype(np.float32)
         self.augment = augment and split == "train"
@@ -144,27 +221,62 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
         self.temporal_stride = max(1, temporal_stride)
         self.transform = transform
         self.eval_num_crops = max(1, eval_num_crops)
+        self.window_mode = window_mode
+        self.hop_length = hop_length
+        self.taper = taper
+        self.bandpass_filter = bandpass_filter
+        self.sampling_rate = sampling_rate
+        self.lowcut = lowcut
+        self.highcut = highcut
+        self.filter_order = filter_order
 
         if normalization not in {"train", "sample", "none"}:
             raise ValueError("normalization must be one of: train, sample, none")
+        if window_mode not in {"crop", "sliding"}:
+            raise ValueError("window_mode must be one of: crop, sliding")
         if crop_mode not in {"none", "center", "random", "random_train_center_eval"}:
             raise ValueError("crop_mode must be one of: none, center, random, random_train_center_eval")
         if transform not in {"raw", "diff", "raw_diff"}:
             raise ValueError("transform must be one of: raw, diff, raw_diff")
+        if taper not in {"none", "hann"}:
+            raise ValueError("taper must be one of: none, hann")
+        if window_mode == "sliding":
+            if window_length is None:
+                raise ValueError("window_length is required when window_mode='sliding'")
+            hop = hop_length or window_length
+            starts = make_window_starts(x.shape[1], window_length, hop)
+            self.items = [(sample_idx, start) for sample_idx in range(len(self.y)) for start in starts]
 
     def __len__(self) -> int:
+        if self.items is not None:
+            return len(self.items)
         return int(self.y.shape[0])
 
     def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
-        x = np.asarray(self.x[idx], dtype=np.float32)
-        if self.split != "train" and self.eval_num_crops > 1:
-            x = self._preprocess_multicrop(x)
+        if self.items is not None:
+            sample_idx, start = self.items[idx]
+            x = np.asarray(self.x[sample_idx], dtype=np.float32)
+            x = self._preprocess_sliding_window(x, start)
+            y = self.y[sample_idx]
         else:
+            x = np.asarray(self.x[idx], dtype=np.float32)
+            y = self.y[idx]
+        if self.items is None and self.split != "train" and self.eval_num_crops > 1:
+            x = self._preprocess_multicrop(x)
+        elif self.items is None:
             x = self._preprocess(x)
         if self.augment:
             x = self._augment(x)
-        y = self.y[idx]
         return torch.from_numpy(x.astype(np.float32)), torch.tensor(y, dtype=torch.long)
+
+    def _preprocess_sliding_window(self, x: np.ndarray, start: int) -> np.ndarray:
+        """Apply fixed sliding-window preprocessing."""
+        if self.temporal_stride > 1:
+            x = x[:: self.temporal_stride]
+        if self.window_length is None:
+            raise ValueError("window_length is required for sliding window preprocessing")
+        x = x[start : start + self.window_length]
+        return self._apply_transform_and_normalization(x)
 
     def _preprocess_multicrop(self, x: np.ndarray) -> np.ndarray:
         """Return deterministic evaluation crops shaped [K, T, C]."""
@@ -187,6 +299,8 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
 
     def _apply_transform_and_normalization(self, x: np.ndarray) -> np.ndarray:
         """Apply signal transform and normalization to one temporal window."""
+        if self.bandpass_filter:
+            x = apply_bandpass_filter(x, self.sampling_rate, self.lowcut, self.highcut, self.filter_order)
         if self.transform == "diff":
             x = np.diff(x, axis=0, prepend=x[:1])
         elif self.transform == "raw_diff":
@@ -201,6 +315,8 @@ class Z24AccelerationDataset(Dataset[tuple[Tensor, Tensor]]):
             std = x.std(axis=0, keepdims=True)
             std = np.where(std < 1e-6, 1.0, std)
             x = (x - mean) / std
+        if self.taper == "hann":
+            x = x * np.hanning(x.shape[0]).astype(np.float32)[:, None]
         return x.astype(np.float32)
 
     def _crop(self, x: np.ndarray) -> np.ndarray:
@@ -251,6 +367,14 @@ def create_dataloaders(
     temporal_stride: int = 1,
     transform: str = "raw",
     eval_num_crops: int = 1,
+    window_mode: str = "crop",
+    hop_length: int | None = None,
+    taper: str = "none",
+    bandpass_filter: bool = False,
+    sampling_rate: float = 100.0,
+    lowcut: float = 0.5,
+    highcut: float = 40.0,
+    filter_order: int = 4,
     loader_kwargs: dict[str, Any] | None = None,
 ) -> tuple[DataLoader[tuple[Tensor, Tensor]], DataLoader[tuple[Tensor, Tensor]], DataLoader[tuple[Tensor, Tensor]]]:
     """Create train/val/test DataLoaders sharing train-set normalization."""
@@ -258,7 +382,17 @@ def create_dataloaders(
     x, y = load_array_pair(data_path, input_file, label_file, input_layout, mmap_mode="r")
     splits = make_split_indices(x.shape[0], train_ratio, val_ratio, seed)
     if normalization == "train":
-        mean, std = compute_train_stats(x, splits.train)
+        if bandpass_filter:
+            mean, std = compute_filtered_train_stats(
+                x,
+                splits.train,
+                sampling_rate=sampling_rate,
+                lowcut=lowcut,
+                highcut=highcut,
+                filter_order=filter_order,
+            )
+        else:
+            mean, std = compute_train_stats(x, splits.train)
     else:
         mean = np.zeros((1, 1, x.shape[-1]), dtype=np.float32)
         std = np.ones((1, 1, x.shape[-1]), dtype=np.float32)
@@ -285,6 +419,14 @@ def create_dataloaders(
             temporal_stride=temporal_stride,
             transform=transform,
             eval_num_crops=eval_num_crops,
+            window_mode=window_mode,
+            hop_length=hop_length,
+            taper=taper,
+            bandpass_filter=bandpass_filter,
+            sampling_rate=sampling_rate,
+            lowcut=lowcut,
+            highcut=highcut,
+            filter_order=filter_order,
         )
         for split in ("train", "val", "test")
     }

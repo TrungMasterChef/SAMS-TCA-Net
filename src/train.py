@@ -57,6 +57,14 @@ def build_dataloaders(config: dict) -> tuple:
             temporal_stride=int(data_cfg.get("temporal_stride", 1)),
             transform=str(data_cfg.get("transform", "raw")),
             eval_num_crops=int(data_cfg.get("eval_num_crops", 1)),
+            window_mode=str(data_cfg.get("window_mode", "crop")),
+            hop_length=data_cfg.get("hop_length"),
+            taper=str(data_cfg.get("taper", "none")),
+            bandpass_filter=bool(data_cfg.get("bandpass_filter", False)),
+            sampling_rate=float(data_cfg.get("sampling_rate", 100.0)),
+            lowcut=float(data_cfg.get("lowcut", 0.5)),
+            highcut=float(data_cfg.get("highcut", 40.0)),
+            filter_order=int(data_cfg.get("filter_order", 4)),
         )
 
     print(f"Data not found in {data_dir}. Using dummy data.")

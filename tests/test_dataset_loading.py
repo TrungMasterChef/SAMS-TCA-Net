@@ -122,3 +122,30 @@ def test_eval_multicrop_batches_are_bktc(tmp_path: Path) -> None:
     assert batch_x.shape == (3, 4, 12, 6)
     assert batch_y.shape == (3,)
     assert torch.isfinite(batch_x).all()
+
+
+def test_sliding_window_preprocessing_repeats_labels_and_returns_windows(tmp_path: Path) -> None:
+    x = np.random.randn(20, 3, 32).astype(np.float32)
+    y = np.arange(20, dtype=np.int64) % 4
+    np.save(tmp_path / "inputs.npy", x)
+    np.save(tmp_path / "labels.npy", y)
+
+    train_loader, _, _ = create_dataloaders(
+        tmp_path,
+        batch_size=4,
+        input_file="inputs.npy",
+        label_file="labels.npy",
+        input_layout="nct",
+        normalization="train",
+        window_mode="sliding",
+        window_length=12,
+        hop_length=6,
+        transform="raw",
+        taper="hann",
+        augment=False,
+    )
+    batch_x, batch_y = next(iter(train_loader))
+    assert len(train_loader.dataset) == 14 * 5
+    assert batch_x.shape == (4, 12, 3)
+    assert batch_y.shape == (4,)
+    assert torch.isfinite(batch_x).all()
