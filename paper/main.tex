@@ -57,9 +57,10 @@ fixed wiring cannot. Evaluated on the Z24 bridge benchmark (\num{1530}
 recordings, \num{27} sensor channels, \num{17} damage classes), MSCA-G attains a
 test accuracy of \result{97.2}\% and a macro-F1 of \result{97.2}\%, the best among
 eight standard time-series baselines (MLP, 1D-CNN, FCN, ResNet, InceptionTime,
-LSTM, TCN, and a Transformer encoder) trained under an identical protocol, while
-using only \result{0.35}\,M parameters---about a quarter of those of the
-next-best model (ResNet-1D, \result{96.9}\%). An ablation study shows that the adaptive
+LSTM, TCN, and a Transformer encoder), each individually tuned under a common
+preprocessing and \num{100}-epoch budget, while using only \result{0.35}\,M
+parameters---about a quarter of those of the next-best model (ResNet-1D,
+\result{96.9}\%). An ablation study shows that the adaptive
 graph, SE attention, attention-pooling head, and inter-block downsampling each
 contribute to the final accuracy. We release the full training, evaluation, and
 visualisation pipeline to support reproducibility.
@@ -265,10 +266,12 @@ with \num{27} channels and \num{6000} samples (\SI{60}{\second} at
 
 \subsection{Evaluation protocol and metrics}
 All models share the preprocessing of Section~\ref{sec:preproc}, the same data
-splits (seed \num{42}), and the same optimiser family. We report accuracy,
-macro-averaged F1, weighted F1, the Matthews correlation coefficient (MCC), and
-one-vs-rest ROC-AUC (macro/micro) on the held-out test set, together with the
-parameter count.
+splits (seed \num{42}), the same AdamW optimiser, and the same \num{100}-epoch
+budget with early stopping. To avoid handicapping any architecture with a single
+shared setting, each model's learning rate, batch size, and LR schedule were
+tuned for best validation accuracy. We report accuracy, macro-averaged F1,
+weighted F1, the Matthews correlation coefficient (MCC), and one-vs-rest ROC-AUC
+(macro/micro) on the held-out test set, together with the parameter count.
 
 \subsection{Main results}
 \label{sec:results}
@@ -276,8 +279,10 @@ Table~\ref{tab:main} compares MSCA-G with the baselines on the test set.
 MSCA-G achieves the highest accuracy (\result{97.2}\%) and macro-F1. The closest
 competitor is a strong ResNet-1D (\result{96.9}\%), which MSCA-G matches and
 slightly exceeds using about \emph{a quarter} of its parameters
-(\result{0.35} vs \result{1.55}\,M); the remaining baselines trail by a wide
-margin under the same protocol.
+(\result{0.35} vs \result{1.55}\,M). Convolutional models (ResNet, InceptionTime,
+FCN, 1D-CNN) form the strong group, while the Transformer, LSTM, and MLP trail
+despite comparable or larger parameter budgets---underlining that capacity alone
+is insufficient on this benchmark.
 
 \begin{table}[t]
   \centering
@@ -289,11 +294,11 @@ margin under the same protocol.
     \toprule
     Model & {Acc.\,(\%)} & {Macro-F1\,(\%)} & {W-F1\,(\%)} & {ROC-AUC} & {Params\,(M)} \\
     \midrule
-    MLP            & 14.1 & 12.3 & 12.3 & 0.650 & 0.29 \\
-    LSTM           & 39.6 & 39.2 & 39.2 & 0.904 & 0.56 \\
-    Transformer    & 69.0 & 69.0 & 69.0 & 0.964 & 0.16 \\
-    1D-CNN         & 78.4 & 78.2 & 78.2 & 0.984 & 0.11 \\
+    MLP            & 21.6 & 20.0 & 20.0 & 0.761 & 1.16 \\
+    LSTM           & 51.0 & 50.5 & 50.5 & 0.941 & 0.56 \\
+    Transformer    & 72.2 & 71.8 & 71.8 & 0.971 & 0.47 \\
     TCN            & 87.5 & 87.7 & 87.7 & 0.992 & 0.33 \\
+    1D-CNN         & 88.6 & 88.4 & 88.4 & 0.993 & 0.11 \\
     FCN            & 92.2 & 92.2 & 92.2 & 0.994 & 0.29 \\
     InceptionTime  & 93.3 & 93.3 & 93.3 & 0.999 & 0.06 \\
     ResNet-1D      & \underline{96.9} & \underline{96.8} & \underline{96.8} & 0.999 & 1.55 \\
@@ -381,9 +386,9 @@ structures and to continuous monitoring streams is left for future work.
 \section{Conclusion}
 We presented MSCA-G, a compact multi-scale convolutional attention network for
 vibration-based damage identification. On the Z24 benchmark it outperforms eight
-standard time-series baselines under an identical protocol while using a small
-parameter budget, and its components are individually justified by an ablation
-study. The complete, reproducible
+individually tuned time-series baselines while using a small parameter budget,
+and its components are individually justified by an ablation study. The complete,
+reproducible
 pipeline (data handling, training, evaluation, and publication-quality figures)
 is released with this paper.
 

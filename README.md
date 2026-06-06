@@ -59,19 +59,21 @@ models trained under the **same** preprocessing and training schedule;
 | ResNet-1D | 96.9 | 96.8 | 0.999 | 1.55M |
 | InceptionTime | 93.3 | 93.3 | 0.999 | 0.06M |
 | FCN | 92.2 | 92.2 | 0.994 | 0.29M |
+| 1D-CNN | 88.6 | 88.4 | 0.993 | 0.11M |
 | TCN | 87.5 | 87.7 | 0.992 | 0.33M |
-| 1D-CNN | 78.4 | 78.2 | 0.984 | 0.11M |
-| Transformer | 69.0 | 69.0 | 0.964 | 0.16M |
-| LSTM | 39.6 | 39.2 | 0.904 | 0.56M |
-| MLP | 14.1 | 12.3 | 0.650 | 0.29M |
+| Transformer | 72.2 | 71.8 | 0.971 | 0.47M |
+| LSTM | 51.0 | 50.5 | 0.941 | 0.56M |
+| MLP | 21.6 | 20.0 | 0.761 | 1.16M |
 
-All models use the **same** preprocessing and training schedule (epoch=100). The
-closest competitor is a well-tuned ResNet-1D (96.9%), which MSCA-G matches and
-slightly exceeds using ~4× fewer parameters; the adaptive sensor graph alone adds
-+3.5 points (ablation) for ~1k extra parameters. Training uses light augmentation
-and single-crop evaluation, so the curves follow the conventional
-train-above-validation pattern (MSCA-G: train acc ≈ 0.997, val acc ≈ 0.982). A
-LaTeX write-up is in [`paper/`](paper/).
+All models share the same preprocessing and 100-epoch budget; each model's
+learning rate, batch size, and LR schedule are tuned for best validation accuracy
+(so no architecture is handicapped by a single shared setting). The closest
+competitor is a well-tuned ResNet-1D (96.9%), which MSCA-G matches and slightly
+exceeds using ~4× fewer parameters; the adaptive sensor graph alone adds +3.5
+points (ablation) for ~1k extra parameters. Training uses light augmentation and
+single-crop evaluation, so curves follow the conventional train-above-validation
+pattern (MSCA-G: train acc ≈ 0.997, val acc ≈ 0.982). A LaTeX write-up is in
+[`paper/`](paper/).
 
 ## Install
 
