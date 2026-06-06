@@ -5,7 +5,7 @@ model:
   num_classes: 17
   hidden_channels: 128
   num_blocks: 4
-  dropout: 0.3
+  dropout: 0.1
   input_layout: btc
   use_se: true
   use_attention_pool: false
@@ -26,7 +26,7 @@ data:
   num_workers: 0
   augment: true
   dummy_samples: 128
-  eval_num_crops: 7
+  eval_num_crops: 1
   window_mode: crop
   hop_length: 384
   taper: none
@@ -36,10 +36,10 @@ data:
   highcut: 40.0
   filter_order: 4
   split_strategy: stratified
-  jitter_std: 0.01
-  scaling_std: 0.08
-  time_mask_ratio: 0.05
-  channel_mask_ratio: 0.15
+  jitter_std: 0.005
+  scaling_std: 0.0
+  time_mask_ratio: 0.0
+  channel_mask_ratio: 0.0
 training:
   batch_size: 64
   epochs: 80

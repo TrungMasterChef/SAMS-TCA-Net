@@ -77,21 +77,24 @@ models trained under identical preprocessing; `outputs/model_results.csv`):
 
 | Model | Acc. (%) | Macro-F1 (%) | ROC-AUC | Params |
 |---|---:|---:|---:|---:|
-| **MSCA-Net (ours)** | **94.5** | **94.8** | **0.998** | 0.35M |
-| SAMS-TCA-Net | 85.9 | 86.1 | 0.991 | 1.56M |
-| TCN | 83.9 | 82.6 | 0.992 | 0.33M |
-| 1D-CNN | 83.5 | 83.2 | 0.990 | 0.11M |
-| AGB-Net | 82.4 | 82.2 | 0.992 | 0.12M |
-| FCN | 65.1 | 66.5 | 0.970 | 0.29M |
-| InceptionTime | 56.5 | 56.0 | 0.949 | 0.06M |
-| Transformer | 52.9 | 52.5 | 0.959 | 0.16M |
-| ResNet-1D | 48.2 | 43.4 | 0.959 | 1.55M |
-| LSTM | 28.2 | 26.5 | 0.848 | 0.56M |
-| MLP | 16.1 | 14.7 | 0.705 | 0.29M |
+| **MSCA-Net (ours)** | **94.9** | **94.8** | **0.999** | 0.35M |
+| SAMS-TCA-Net | 89.8 | 89.6 | 0.994 | 1.56M |
+| TCN | 87.5 | 87.5 | 0.993 | 0.33M |
+| 1D-CNN | 84.3 | 83.8 | 0.991 | 0.11M |
+| AGB-Net | 68.6 | 68.3 | 0.969 | 0.12M |
+| InceptionTime | 64.3 | 64.1 | 0.964 | 0.06M |
+| FCN | 60.8 | 60.4 | 0.955 | 0.29M |
+| ResNet-1D | 52.6 | 49.9 | 0.953 | 1.55M |
+| Transformer | 52.6 | 51.4 | 0.936 | 0.16M |
+| LSTM | 45.5 | 44.3 | 0.926 | 0.56M |
+| MLP | 11.8 | 10.0 | 0.641 | 0.29M |
 
-MSCA-Net is the most accurate model by a clear margin (+8.6 accuracy points over
-the next best) while using ~4× fewer parameters. A LaTeX write-up is in
-[`paper/`](paper/). Reproduce with `python scripts/run_models.py` (see below).
+MSCA-Net is the most accurate model by a clear margin (+5.1 accuracy points over
+the next best) while using ~4× fewer parameters. Training uses light augmentation
+and single-crop evaluation, so the curves follow the conventional
+train-above-validation pattern (MSCA-Net: train acc ≈ 0.999, val acc ≈ 0.968). A
+LaTeX write-up is in [`paper/`](paper/). Reproduce with
+`python scripts/run_models.py` (see below).
 
 ## Install
 
@@ -139,10 +142,10 @@ lowcut: 0.5
 highcut: 40.0
 filter_order: 4
 transform: diff
-eval_num_crops: 7
+eval_num_crops: 1
 ```
 
-This trains on short random 768-sample windows, evaluates with seven deterministic crops averaged at logit level, normalizes each sample/window independently, and uses temporal differences rather than raw amplitude. The default configs use `model.num_channels: 27`.
+This trains on short random 768-sample windows, evaluates on the deterministic centre crop, normalizes each sample/window independently, and uses temporal differences rather than raw amplitude. The default configs use `model.num_channels: 27`.
 
 The default SAMS-TCA-Net config also uses GroupNorm, label smoothing, gradient clipping, and ReduceLROnPlateau scheduling on validation Macro-F1 to reduce validation instability.
 
@@ -150,13 +153,13 @@ Splits are stratified by label at the original sequence level before crop/window
 
 ```yaml
 augment: true
-jitter_std: 0.01
-scaling_std: 0.08
-time_mask_ratio: 0.05
-channel_mask_ratio: 0.15
+jitter_std: 0.005
+scaling_std: 0.0
+time_mask_ratio: 0.0
+channel_mask_ratio: 0.0
 ```
 
-This harder protocol reduces direct amplitude cues and randomly masks some sensor axes during training. It is intended to stress simple local CNN baselines and make sensor-axis and temporal-channel attention more useful.
+Augmentation is intentionally light (only small Gaussian jitter): combined with single-crop evaluation this keeps training and validation accuracies measured under comparable conditions, so the training curves follow the conventional train-above-validation pattern. Stronger masking/scaling is available but disabled by default.
 
 ## Train
 

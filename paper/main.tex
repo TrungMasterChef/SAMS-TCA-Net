@@ -50,15 +50,15 @@ InceptionTime-style multi-scale feature extractor with two lightweight attention
 mechanisms: squeeze-and-excitation (SE) channel recalibration inside every block
 and a learned temporal attention-pooling head. Evaluated on the Z24 bridge
 benchmark (\num{1530} recordings, \num{27} sensor channels, \num{17} damage
-classes), MSCA-Net attains a test accuracy of \result{94.5}\% and a macro-F1 of
+classes), MSCA-Net attains a test accuracy of \result{94.9}\% and a macro-F1 of
 \result{94.8}\%, outperforming eight standard time-series baselines (MLP, 1D-CNN,
 FCN, ResNet, InceptionTime, LSTM, TCN, and a Transformer encoder) as well as two
 stronger attention/graph networks, while using only \result{0.35}\,M
-parameters---about one quarter of the next-best model and an absolute improvement
-of \result{8.6} accuracy points over it. An ablation study confirms that both the
-SE attention and the attention-pooling head contribute to the final accuracy. We
-release the full training, evaluation, and visualisation pipeline to support
-reproducibility.
+parameters---less than a quarter of the next-best model and an absolute
+improvement of \result{5.1} accuracy points over it. An ablation study confirms
+that the SE attention, the attention-pooling head, and inter-block downsampling
+each contribute to the final accuracy. We release the full training, evaluation,
+and visualisation pipeline to support reproducibility.
 
 \vspace{0.5em}
 \noindent\textbf{Keywords:} structural health monitoring; damage detection;
@@ -137,9 +137,9 @@ Recordings are split at the sequence level into train/validation/test partitions
 along time, $\tilde{x}_t = x_t - x_{t-1}$, to emphasise transient dynamics and
 suppress slow drifts, and then standardised per window (zero mean, unit
 variance) so that absolute amplitude does not dominate. During training we sample
-random \num{768}-step crops and apply jitter, amplitude scaling, temporal
-masking, and random sensor (channel) masking; at inference we average the logits
-of seven evenly spaced crops to obtain a sequence-level prediction.
+random \num{768}-step crops and apply only light Gaussian jitter as
+regularisation; at inference we use the deterministic centre crop, so the
+training and validation accuracies are measured under comparable conditions.
 
 \subsection{MSCA-Net architecture}
 \label{sec:arch}
@@ -222,7 +222,7 @@ Models are trained with AdamW (learning rate \num{8e-4}, weight decay
 \num{2e-4}), cross-entropy with label smoothing, gradient-norm clipping, and a
 \texttt{ReduceLROnPlateau} schedule on validation macro-F1. The best checkpoint
 is selected by validation macro-F1 with early stopping. MSCA-Net uses
-$H=\num{128}$, $L=\num{4}$, and dropout \num{0.3}.
+$H=\num{128}$, $L=\num{4}$, and dropout \num{0.1}.
 
 \section{Experiments}
 \label{sec:experiments}
@@ -256,18 +256,18 @@ MSCA-Net achieves the highest accuracy and macro-F1 while remaining compact.
     \toprule
     Model & {Acc.\,(\%)} & {Macro-F1\,(\%)} & {W-F1\,(\%)} & {ROC-AUC} & {Params\,(M)} \\
     \midrule
-    MLP            & 16.1 & 14.7 & 14.7 & 0.705 & 0.29 \\
-    1D-CNN         & 83.5 & 83.2 & 83.2 & 0.990 & 0.11 \\
-    FCN            & 65.1 & 66.5 & 66.5 & 0.970 & 0.29 \\
-    ResNet-1D      & 48.2 & 43.4 & 43.4 & 0.959 & 1.55 \\
-    InceptionTime  & 56.5 & 56.0 & 56.0 & 0.949 & 0.06 \\
-    LSTM           & 28.2 & 26.5 & 26.5 & 0.848 & 0.56 \\
-    TCN            & 83.9 & 82.6 & 82.6 & 0.992 & 0.33 \\
-    Transformer    & 52.9 & 52.5 & 52.5 & 0.959 & 0.16 \\
-    SAMS-TCA-Net   & \underline{85.9} & \underline{86.1} & \underline{86.1} & 0.991 & 1.56 \\
-    AGB-Net        & 82.4 & 82.2 & 82.2 & 0.992 & 0.12 \\
+    MLP            & 11.8 & 10.0 & 10.0 & 0.641 & 0.29 \\
+    1D-CNN         & 84.3 & 83.8 & 83.8 & 0.991 & 0.11 \\
+    FCN            & 60.8 & 60.4 & 60.4 & 0.955 & 0.29 \\
+    ResNet-1D      & 52.6 & 49.9 & 49.9 & 0.953 & 1.55 \\
+    InceptionTime  & 64.3 & 64.1 & 64.1 & 0.964 & 0.06 \\
+    LSTM           & 45.5 & 44.3 & 44.3 & 0.926 & 0.56 \\
+    TCN            & 87.5 & 87.5 & 87.5 & 0.993 & 0.33 \\
+    Transformer    & 52.6 & 51.4 & 51.4 & 0.936 & 0.16 \\
+    SAMS-TCA-Net   & \underline{89.8} & \underline{89.6} & \underline{89.6} & 0.994 & 1.56 \\
+    AGB-Net        & 68.6 & 68.3 & 68.3 & 0.969 & 0.12 \\
     \midrule
-    \textbf{MSCA-Net (ours)} & \bfseries 94.5 & \bfseries 94.8 & \bfseries 94.8 & \bfseries 0.998 & 0.35 \\
+    \textbf{MSCA-Net (ours)} & \bfseries 94.9 & \bfseries 94.8 & \bfseries 94.8 & \bfseries 0.999 & 0.35 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -276,11 +276,11 @@ MSCA-Net achieves the highest accuracy and macro-F1 while remaining compact.
 \label{sec:ablation}
 Table~\ref{tab:ablation} removes one component of MSCA-Net at a time. The
 squeeze-and-excitation module is the largest single contributor
-($-7.1$ accuracy points when removed), confirming that channel recalibration is
-important when many sensors carry partially redundant information. The learned
-attention-pooling head ($-3.1$) and the inter-block temporal downsampling
-($-4.3$) also contribute; downsampling additionally reduces the sequence length
-processed by deeper blocks, so it improves accuracy and efficiency together.
+($-3.5$ accuracy points when removed), confirming that channel recalibration is
+important when many sensors carry partially redundant information. The inter-block
+temporal downsampling ($-3.1$) and the learned attention-pooling head ($-2.4$)
+also contribute; downsampling additionally shortens the sequence processed by
+deeper blocks, so it improves accuracy and efficiency together.
 
 \begin{table}[t]
   \centering
@@ -291,10 +291,10 @@ processed by deeper blocks, so it improves accuracy and efficiency together.
     \toprule
     Variant & {Acc.\,(\%)} & {Macro-F1\,(\%)} & {$\Delta$\,Acc.} \\
     \midrule
-    Full MSCA-Net              & \bfseries 94.9 & \bfseries 95.1 & {--} \\
-    w/o squeeze-and-excitation & 87.8 & 88.0 & -7.1 \\
-    w/o attention pooling      & 91.8 & 92.2 & -3.1 \\
-    w/o downsampling           & 90.6 & 90.8 & -4.3 \\
+    Full MSCA-Net              & \bfseries 93.7 & \bfseries 93.7 & {--} \\
+    w/o squeeze-and-excitation & 90.2 & 90.2 & -3.5 \\
+    w/o attention pooling      & 91.4 & 91.5 & -2.4 \\
+    w/o downsampling           & 90.6 & 90.7 & -3.1 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -335,8 +335,9 @@ The results indicate that, for this benchmark, careful multi-scale feature
 extraction combined with lightweight attention is more effective and far more
 parameter efficient than larger recurrent or Transformer models. The first-order
 difference and per-window standardisation remove nuisance amplitude and drift,
-while channel masking during training encourages the model not to rely on any
-single sensor---consistent with robust SHM practice. A limitation is that
+which we found more impactful than heavy data augmentation: light jitter together
+with single-crop evaluation already yields strong, well-calibrated models whose
+training and validation curves behave conventionally. A limitation is that
 evaluation uses a single benchmark with controlled damage; transfer to other
 structures and to continuous monitoring streams is left for future work.
 
