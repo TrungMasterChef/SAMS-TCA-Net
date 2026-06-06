@@ -10,7 +10,7 @@ model:
   use_se: true
   use_attention_pool: true
   downsample: true
-  use_graph_front: true
+  use_graph_front: false
   graph_embed_dim: 10
 data:
   data_dir: src/data/Z24-dataset-processed
@@ -48,26 +48,26 @@ training:
   learning_rate: 0.0008
   weight_decay: 0.0002
   device: auto
-  best_checkpoint_path: outputs/ablations_msca_net/full/best.pt
-  last_checkpoint_path: outputs/ablations_msca_net/full/last.pt
-  checkpoint_path: outputs/ablations_msca_net/full/best.pt
-  history_path: outputs/ablations_msca_net/full/history.csv
-  training_log_path: outputs/ablations_msca_net/full/training_log.txt
-  metrics_path: outputs/ablations_msca_net/full/metrics.json
-  confusion_matrix_npy_path: outputs/ablations_msca_net/full/confusion_matrix.npy
-  confusion_matrix_png_path: outputs/ablations_msca_net/full/confusion_matrix.png
+  best_checkpoint_path: outputs/ablations_msca_net/no_graph/best.pt
+  last_checkpoint_path: outputs/ablations_msca_net/no_graph/last.pt
+  checkpoint_path: outputs/ablations_msca_net/no_graph/best.pt
+  history_path: outputs/ablations_msca_net/no_graph/history.csv
+  training_log_path: outputs/ablations_msca_net/no_graph/training_log.txt
+  metrics_path: outputs/ablations_msca_net/no_graph/metrics.json
+  confusion_matrix_npy_path: outputs/ablations_msca_net/no_graph/confusion_matrix.npy
+  confusion_matrix_png_path: outputs/ablations_msca_net/no_graph/confusion_matrix.png
   early_stopping_patience: 15
   early_stopping_min_delta: 0.0
-  history_plot_path: outputs/ablations_msca_net/full/history.png
-  f1_scores_path: outputs/ablations_msca_net/full/f1_scores.csv
-  val_confusion_matrix_npy_path: outputs/ablations_msca_net/full/val_confusion_matrix.npy
-  val_confusion_matrix_png_path: outputs/ablations_msca_net/full/val_confusion_matrix.png
-  val_f1_scores_path: outputs/ablations_msca_net/full/val_f1_scores.csv
+  history_plot_path: outputs/ablations_msca_net/no_graph/history.png
+  f1_scores_path: outputs/ablations_msca_net/no_graph/f1_scores.csv
+  val_confusion_matrix_npy_path: outputs/ablations_msca_net/no_graph/val_confusion_matrix.npy
+  val_confusion_matrix_png_path: outputs/ablations_msca_net/no_graph/val_confusion_matrix.png
+  val_f1_scores_path: outputs/ablations_msca_net/no_graph/val_f1_scores.csv
   label_smoothing: 0.05
   gradient_clip_norm: 1.0
   scheduler: reduce_on_plateau
   scheduler_patience: 4
   scheduler_factor: 0.5
   min_learning_rate: 1.0e-05
-  roc_curve_path: outputs/ablations_msca_net/full/roc_curve.png
-  tsne_path: outputs/ablations_msca_net/full/tsne.png
+  roc_curve_path: outputs/ablations_msca_net/no_graph/roc_curve.png
+  tsne_path: outputs/ablations_msca_net/no_graph/tsne.png

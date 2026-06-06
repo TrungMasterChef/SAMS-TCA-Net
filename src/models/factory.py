@@ -88,6 +88,8 @@ def build_model(model_config: dict) -> nn.Module:
         kwargs["use_se"] = bool(model_config.get("use_se", True))
         kwargs["use_attention_pool"] = bool(model_config.get("use_attention_pool", True))
         kwargs["downsample"] = bool(model_config.get("downsample", True))
+        kwargs["use_graph_front"] = bool(model_config.get("use_graph_front", False))
+        kwargs["graph_embed_dim"] = int(model_config.get("graph_embed_dim", 10))
     if model_cls is MLP1D:
         kwargs["pool_size"] = int(model_config.get("pool_size", 32))
     if model_cls in {LSTM1D}:

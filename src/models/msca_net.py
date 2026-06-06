@@ -103,6 +103,28 @@ class AttentionPool1d(nn.Module):
         return (x * weights).sum(dim=-1)
 
 
+class AdaptiveSensorGraph(nn.Module):
+    """Adaptive cross-sensor mixing with a learned adjacency (graph front-end).
+
+    Treats the raw sensor channels as graph nodes and propagates information
+    across them through ``A = softmax(ReLU(E Eᵀ))``, where ``E`` are learnable
+    node embeddings. Motivated by SHM: damage changes the correlation structure
+    between sensors, which a fixed wiring cannot capture.
+    """
+
+    def __init__(self, num_sensors: int, embed_dim: int = 10) -> None:
+        super().__init__()
+        self.node_embeddings = nn.Parameter(torch.empty(num_sensors, embed_dim))
+        nn.init.xavier_uniform_(self.node_embeddings)
+        self.proj = nn.Conv1d(num_sensors, num_sensors, kernel_size=1)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Residually mix the ``[B, N, T]`` sensor channels over the graph."""
+        adjacency = torch.softmax(torch.relu(self.node_embeddings @ self.node_embeddings.t()), dim=1)
+        mixed = torch.einsum("nm,bmt->bnt", adjacency, x)
+        return x + self.proj(mixed)
+
+
 class MSCANet(nn.Module):
     """Multi-Scale Convolutional Attention Network.
 
@@ -116,6 +138,8 @@ class MSCANet(nn.Module):
         use_se: Enable squeeze-and-excitation channel attention.
         use_attention_pool: Use attention pooling (else global average pooling).
         downsample: Halve the time axis between blocks with max pooling.
+        use_graph_front: Enable the adaptive cross-sensor graph front-end.
+        graph_embed_dim: Node-embedding dimension for the sensor graph.
     """
 
     def __init__(
@@ -129,6 +153,8 @@ class MSCANet(nn.Module):
         use_se: bool = True,
         use_attention_pool: bool = True,
         downsample: bool = True,
+        use_graph_front: bool = False,
+        graph_embed_dim: int = 10,
     ) -> None:
         super().__init__()
         if input_layout not in {"btc", "bct"}:
@@ -138,6 +164,7 @@ class MSCANet(nn.Module):
         self.num_classes = num_classes
         self.input_layout = input_layout
 
+        self.graph_front = AdaptiveSensorGraph(num_channels, graph_embed_dim) if use_graph_front else None
         self.stem = nn.Sequential(
             nn.Conv1d(num_channels, hidden_channels, kernel_size=7, padding=3, bias=False),
             make_group_norm(hidden_channels),
@@ -169,7 +196,8 @@ class MSCANet(nn.Module):
         elif x.shape[1] != self.num_channels:
             raise ValueError(f"Expected channel dim C={self.num_channels}, got {x.shape[1]}")
 
-        x = self.stem(x)
-        x = self.blocks(x)
-        pooled = self.pooling(x) if self.pooling is not None else x.mean(dim=-1)
+        if self.graph_front is not None:
+            x = self.graph_front(x)
+        features = self.blocks(self.stem(x))
+        pooled = self.pooling(features) if self.pooling is not None else features.mean(dim=-1)
         return self.classifier(pooled)

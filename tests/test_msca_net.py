@@ -52,6 +52,16 @@ def test_ablation_flags_forward() -> None:
         assert torch.isfinite(logits).all()
 
 
+def test_adaptive_graph_front_forward() -> None:
+    model = MSCANet(num_channels=4, num_classes=5, hidden_channels=16, num_blocks=3, use_graph_front=True)
+    assert any(name == "graph_front.node_embeddings" for name, _ in model.named_parameters())
+    for layout, x in (("btc", torch.randn(2, 128, 4)), ("bct", torch.randn(2, 4, 128))):
+        model.input_layout = layout
+        logits = model(x)
+        assert logits.shape == (2, 5)
+        assert torch.isfinite(logits).all()
+
+
 def test_uses_group_norm_and_no_batch_norm() -> None:
     model = MSCANet(num_channels=3, num_classes=5, hidden_channels=16, num_blocks=3)
     assert any(isinstance(module, torch.nn.GroupNorm) for module in model.modules())

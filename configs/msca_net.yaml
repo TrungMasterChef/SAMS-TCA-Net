@@ -10,6 +10,8 @@ model:
   use_se: true
   use_attention_pool: true
   downsample: true
+  use_graph_front: true
+  graph_embed_dim: 10
 data:
   data_dir: src/data/Z24-dataset-processed
   input_file: inputs.npy

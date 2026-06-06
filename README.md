@@ -1,13 +1,14 @@
-# SAMS-TCA-Net, AGB-Net & MSCA-Net
+# MSCA-G, SAMS-TCA-Net & AGB-Net
 
 PyTorch implementations of three architectures for accelerometer time-series
 classification on the Z24 bridge structural-health-monitoring benchmark:
 
-* **MSCA-Net** — a Multi-Scale Convolutional Attention network. An
-  InceptionTime-style multi-scale extractor with **squeeze-and-excitation**
-  channel attention and a learned **attention-pooling** head. It is the
-  highest-accuracy model here and clearly beats the CNN baselines (see
-  [Results](#results)).
+* **MSCA-G** (proposed) — a Multi-Scale Convolutional Attention network with an
+  **adaptive sensor graph**. A learned cross-sensor graph mixes information among
+  the 27 accelerometers, an InceptionTime-style multi-scale extractor with
+  **squeeze-and-excitation** channel attention extracts features, and a learned
+  **attention-pooling** head aggregates over time. It is the highest-accuracy
+  model here (97.7% test accuracy, see [Results](#results)).
 * **SAMS-TCA-Net** — a pure convolutional attention network (sensor-axis
   attention, multi-scale residual inception blocks with scale and
   temporal-channel attention, class-aware pooling).
@@ -39,19 +40,23 @@ tests/                         # forward-pass, ablation, and visualization tests
 All models accept `[B, T, C]` (default) or `[B, C, T]` (`input_layout="bct"`)
 and return logits `[B, num_classes]` without softmax.
 
-**MSCA-Net** (`MSCANet`) is the recommended high-accuracy model:
+**MSCA-G** (`MSCANet` with `use_graph_front: true`) is the recommended,
+highest-accuracy model:
 
 ```text
-input -> conv stem
+input -> adaptive sensor graph (learned adjacency A = softmax(relu(E Eᵀ)), residual mix)
+      -> conv stem
       -> N x [multi-scale Conv1D block + squeeze-and-excitation + residual] (with downsampling)
       -> attention pooling over time
       -> classifier
 ```
 
-Squeeze-and-excitation recalibrates channels inside every block and the
-attention-pooling head replaces global average pooling — together they lift
-accuracy over the plain CNN/Inception baselines while the network stays small
-(~0.35M params). Ablation flags: `use_se`, `use_attention_pool`, `downsample`.
+The **adaptive sensor graph** learns the cross-sensor connectivity from data
+(damage changes inter-sensor correlations), squeeze-and-excitation recalibrates
+channels inside every block, and the attention-pooling head replaces global
+average pooling. Together they reach 97.7% test accuracy while the network stays
+small (~0.35M params). Ablation flags: `use_graph_front`, `use_se`,
+`use_attention_pool`, `downsample`.
 
 **AGB-Net** (`GraphBiGRUNet`) is the graph hybrid:
 
@@ -77,7 +82,7 @@ models trained under identical preprocessing; `outputs/model_results.csv`):
 
 | Model | Acc. (%) | Macro-F1 (%) | ROC-AUC | Params |
 |---|---:|---:|---:|---:|
-| **MSCA-Net (ours)** | **94.9** | **94.8** | **0.999** | 0.35M |
+| **MSCA-G (ours)** | **97.7** | **97.7** | **1.000** | 0.35M |
 | SAMS-TCA-Net | 89.8 | 89.6 | 0.994 | 1.56M |
 | TCN | 87.5 | 87.5 | 0.993 | 0.33M |
 | 1D-CNN | 84.3 | 83.8 | 0.991 | 0.11M |
@@ -89,10 +94,11 @@ models trained under identical preprocessing; `outputs/model_results.csv`):
 | LSTM | 45.5 | 44.3 | 0.926 | 0.56M |
 | MLP | 11.8 | 10.0 | 0.641 | 0.29M |
 
-MSCA-Net is the most accurate model by a clear margin (+5.1 accuracy points over
-the next best) while using ~4× fewer parameters. Training uses light augmentation
+MSCA-G is the most accurate model by a clear margin (+7.9 accuracy points over the
+next best) while using ~4× fewer parameters; the adaptive sensor graph alone adds
++3.5 points (ablation) for ~1k extra parameters. Training uses light augmentation
 and single-crop evaluation, so the curves follow the conventional
-train-above-validation pattern (MSCA-Net: train acc ≈ 0.999, val acc ≈ 0.968). A
+train-above-validation pattern (MSCA-G: train acc ≈ 0.997, val acc ≈ 0.982). A
 LaTeX write-up is in [`paper/`](paper/). Reproduce with
 `python scripts/run_models.py` (see below).
 
@@ -224,8 +230,8 @@ Run all ablation configs and save metrics to `outputs/ablation_results.csv`:
 python scripts/run_ablations.py
 ```
 
-MSCA-Net and AGB-Net ablations live under `configs/ablations_msca_net/` (full,
-`no_se`, `no_attention_pool`, `no_downsample`) and `configs/ablations_agb_net/`
+MSCA-G and AGB-Net ablations live under `configs/ablations_msca_net/` (full,
+`no_graph`, `no_se`, `no_attention_pool`, `no_downsample`) and `configs/ablations_agb_net/`
 (full, `no_graph`, `fixed_graph`, `no_spatial_attention`,
 `no_temporal_attention`, `unidirectional`). The script records every boolean
 model flag automatically:

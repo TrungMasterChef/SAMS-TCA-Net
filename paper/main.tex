@@ -1,4 +1,4 @@
-%% MSCA-Net: Multi-Scale Convolutional Attention Network for Z24 bridge SHM
+%% MSCA-G: Multi-Scale Convolutional Attention Network for Z24 bridge SHM
 %% Single-column article layout for easy compilation. The structure maps
 %% cleanly onto Elsevier (elsarticle) or MDPI templates if a specific journal
 %% is targeted; see README in this folder for porting notes.
@@ -28,8 +28,9 @@
 % Values are populated from outputs/model_results.csv after training.
 \newcommand{\result}[1]{#1}
 
-\title{\bfseries MSCA-Net: A Multi-Scale Convolutional Attention Network for
-Vibration-Based Structural Damage Identification on the Z24 Bridge}
+\title{\bfseries MSCA-G: A Multi-Scale Convolutional Attention Network with an
+Adaptive Sensor Graph for Vibration-Based Structural Damage Identification on the
+Z24 Bridge}
 
 \author[1]{First Author}
 \author[1]{Second Author}
@@ -44,21 +45,23 @@ Vibration-Based Structural Damage Identification on the Z24 Bridge}
 \noindent
 Vibration-based structural health monitoring (SHM) of bridges requires
 classifiers that turn long, multi-channel acceleration recordings into reliable
-damage-state decisions. We propose \textbf{MSCA-Net}, a compact one-dimensional
-\emph{Multi-Scale Convolutional Attention} network that couples an
-InceptionTime-style multi-scale feature extractor with two lightweight attention
-mechanisms: squeeze-and-excitation (SE) channel recalibration inside every block
-and a learned temporal attention-pooling head. Evaluated on the Z24 bridge
-benchmark (\num{1530} recordings, \num{27} sensor channels, \num{17} damage
-classes), MSCA-Net attains a test accuracy of \result{94.9}\% and a macro-F1 of
-\result{94.8}\%, outperforming eight standard time-series baselines (MLP, 1D-CNN,
-FCN, ResNet, InceptionTime, LSTM, TCN, and a Transformer encoder) as well as two
-stronger attention/graph networks, while using only \result{0.35}\,M
-parameters---less than a quarter of the next-best model and an absolute
-improvement of \result{5.1} accuracy points over it. An ablation study confirms
-that the SE attention, the attention-pooling head, and inter-block downsampling
-each contribute to the final accuracy. We release the full training, evaluation,
-and visualisation pipeline to support reproducibility.
+damage-state decisions. We propose \textbf{MSCA-G}, a compact one-dimensional
+\emph{Multi-Scale Convolutional Attention} network with an \emph{adaptive sensor
+graph}. An InceptionTime-style multi-scale extractor is paired with three
+lightweight mechanisms: a learned cross-sensor graph that mixes information among
+the accelerometers, squeeze-and-excitation (SE) channel recalibration inside
+every block, and a temporal attention-pooling head. The graph is the central
+idea: because damage changes the correlation structure between sensors, a
+data-driven adjacency---needing no physical coordinates---adapts to it where a
+fixed wiring cannot. Evaluated on the Z24 bridge benchmark (\num{1530}
+recordings, \num{27} sensor channels, \num{17} damage classes), MSCA-G attains a
+test accuracy of \result{97.7}\% and a macro-F1 of \result{97.7}\%, outperforming
+eight standard time-series baselines (MLP, 1D-CNN, FCN, ResNet, InceptionTime,
+LSTM, TCN, and a Transformer encoder) as well as two stronger attention/graph
+networks, while using only \result{0.35}\,M parameters. An ablation study shows
+that the adaptive graph, SE attention, attention-pooling head, and inter-block
+downsampling each contribute to the final accuracy. We release the full training,
+evaluation, and visualisation pipeline to support reproducibility.
 
 \vspace{0.5em}
 \noindent\textbf{Keywords:} structural health monitoring; damage detection;
@@ -84,19 +87,22 @@ equivariant, parameter efficient, and fast \cite{abdeljaber2017real}. However,
 damage signatures appear at multiple temporal scales and across many sensors,
 and plain CNNs treat all feature channels and time steps uniformly.
 
-We address these issues with \textbf{MSCA-Net}, a multi-scale convolutional
-network augmented with two complementary, well-understood attention mechanisms.
-Our contributions are:
+We address these issues with \textbf{MSCA-G}, a multi-scale convolutional network
+augmented with an adaptive sensor graph and two complementary attention
+mechanisms. Our contributions are:
 \begin{enumerate}
-  \item A compact 1D architecture that fuses multi-scale convolution,
-  squeeze-and-excitation channel attention, and learned temporal attention
-  pooling for damage-state classification (Section~\ref{sec:method}).
+  \item An \emph{adaptive sensor-graph} front-end that learns the cross-sensor
+  connectivity from data and mixes information among accelerometers before
+  convolutional feature extraction---motivated by the fact that damage alters
+  inter-sensor correlations (Section~\ref{sec:arch}).
+  \item A compact 1D architecture that fuses this graph with multi-scale
+  convolution, squeeze-and-excitation channel attention, and learned temporal
+  attention pooling for damage-state classification (Section~\ref{sec:method}).
   \item A rigorous, reproducible evaluation on the Z24 bridge benchmark against
-  nine baselines under an identical preprocessing and training protocol
-  (Section~\ref{sec:experiments}), where MSCA-Net achieves the best accuracy and
-  macro-F1 with a small parameter budget.
-  \item An ablation study isolating the contribution of each attention component,
-  plus confusion-matrix, ROC, and t-SNE analyses of the learned representation.
+  ten competing models under an identical preprocessing and training protocol
+  (Section~\ref{sec:experiments}), where MSCA-G achieves the best accuracy and
+  macro-F1 with a small parameter budget, plus an ablation study and
+  confusion-matrix, ROC, and t-SNE analyses of the learned representation.
 \end{enumerate}
 
 \section{Related Work}
@@ -114,12 +120,15 @@ temporal convolutional networks (TCN) \cite{bai2018empirical} model temporal
 dependencies, while Transformer encoders \cite{vaswani2017attention} capture
 long-range interactions through self-attention.
 
-\textbf{Attention mechanisms.} Squeeze-and-excitation blocks recalibrate channel
-responses with negligible overhead \cite{hu2018squeeze}. Attention pooling
-replaces global average pooling with a learned, content-dependent weighting of
-time steps. MSCA-Net combines these with multi-scale convolution; the novelty is
-deliberately moderate: established components are integrated and tuned for SHM
-rather than introducing a new operator.
+\textbf{Attention and graph mechanisms.} Squeeze-and-excitation blocks
+recalibrate channel responses with negligible overhead \cite{hu2018squeeze}, and
+attention pooling replaces global average pooling with a learned weighting of time
+steps. Graph neural networks model relations between sensors, but usually require
+a predefined adjacency; adaptive-graph methods instead learn the connectivity
+from data. MSCA-G brings this idea to bridge SHM through a learned cross-sensor
+graph that, combined with multi-scale convolution and the two attention modules,
+both raises accuracy and gives the model a physically meaningful, data-driven
+notion of which sensors interact.
 
 \section{Methodology}
 \label{sec:method}
@@ -141,14 +150,29 @@ random \num{768}-step crops and apply only light Gaussian jitter as
 regularisation; at inference we use the deterministic centre crop, so the
 training and validation accuracies are measured under comparable conditions.
 
-\subsection{MSCA-Net architecture}
+\subsection{MSCA-G architecture}
 \label{sec:arch}
-Figure~\ref{fig:arch} shows the architecture. A convolutional stem
-($7$-tap conv, GroupNorm, GELU) maps the $C$ input channels to $H$ feature maps.
-The body stacks $L$ \emph{multi-scale convolutional attention} blocks; temporal
-resolution is halved by max pooling between blocks. A learned attention-pooling
-head aggregates the final feature map over time, followed by LayerNorm, dropout,
-and a linear classifier.
+Figure~\ref{fig:arch} shows the architecture, which we call \textbf{MSCA-G}
+(Multi-Scale Convolutional Attention with an adaptive sensor Graph). An adaptive
+sensor-graph front-end first mixes information across the $C$ sensors. A
+convolutional stem ($7$-tap conv, GroupNorm, GELU) then maps the channels to $H$
+feature maps. The body stacks $L$ \emph{multi-scale convolutional attention}
+blocks; temporal resolution is halved by max pooling between blocks. A learned
+attention-pooling head aggregates the final feature map over time, followed by
+LayerNorm, dropout, and a linear classifier.
+
+\textbf{Adaptive sensor graph.} The $C$ sensors are treated as nodes of a graph
+whose connectivity is \emph{learned} rather than fixed. From trainable node
+embeddings $E\in\mathbb{R}^{C\times d}$ we form a row-stochastic adjacency
+$A=\mathrm{softmax}(\mathrm{ReLU}(E E^{\top}))$ and propagate the input
+residually across sensors,
+\begin{equation}
+  X' = X + W\big(A X\big),
+\end{equation}
+where $AX$ aggregates each sensor's neighbours at every time step and $W$ is a
+$1{\times}1$ convolution. This is the model's main novelty: damage alters the
+correlation structure between sensors, so a data-driven graph---requiring no
+physical coordinates---can adapt to it where a fixed wiring cannot.
 
 \textbf{Multi-scale block.} Each block applies parallel depth-preserving
 convolutions with kernel sizes $\{9,19,39\}$ on a bottleneck projection, plus a
@@ -175,21 +199,24 @@ most damage-informative time steps.
 \begin{figure}[t]
   \centering
   \begin{tikzpicture}[
-      font=\small,
-      box/.style={draw, rounded corners=2pt, minimum height=9mm, minimum width=15mm, align=center, fill=blue!5},
-      se/.style={draw, rounded corners=2pt, minimum height=9mm, minimum width=15mm, align=center, fill=green!8},
+      font=\footnotesize,
+      box/.style={draw, rounded corners=2pt, minimum height=9mm, minimum width=12mm, align=center, fill=blue!5},
+      se/.style={draw, rounded corners=2pt, minimum height=9mm, minimum width=12mm, align=center, fill=green!8},
+      gr/.style={draw, rounded corners=2pt, minimum height=9mm, minimum width=12mm, align=center, fill=red!8},
       arr/.style={-{Latex[length=2mm]}, thick},
-      node distance=5mm and 6mm,
+      node distance=4mm and 4.5mm,
     ]
     % Main data flow (left to right)
     \node (in) [box, fill=gray!10] {Input\\$T{\times}27$};
-    \node (stem) [box, right=of in] {Conv stem\\$k{=}7$};
+    \node (graph) [gr, right=of in] {Sensor\\graph};
+    \node (stem) [box, right=of graph] {Conv\\stem};
     \node (b1) [box, right=of stem] {MSCA\\block};
     \node (pool) [box, right=of b1, fill=blue!10] {$\downarrow 2$};
-    \node (bl) [box, right=of pool] {MSCA\\block ($\times L$)};
-    \node (ap) [se, right=of bl] {Attention\\pooling};
+    \node (bl) [box, right=of pool] {MSCA\\block $\times L$};
+    \node (ap) [se, right=of bl] {Attn\\pool};
     \node (cls) [box, right=of ap, fill=orange!10] {Linear\\$\to 17$};
-    \draw [arr] (in) -- (stem);
+    \draw [arr] (in) -- (graph);
+    \draw [arr] (graph) -- (stem);
     \draw [arr] (stem) -- (b1);
     \draw [arr] (b1) -- (pool);
     \draw [arr] (pool) -- (bl);
@@ -210,10 +237,11 @@ most damage-informative time steps.
              label={[font=\footnotesize]above:MSCA block}] {};
     \end{scope}
   \end{tikzpicture}
-  \caption{MSCA-Net. A convolutional stem feeds $L$ multi-scale convolutional
-  attention (MSCA) blocks with squeeze-and-excitation (SE) and residual
-  connections; max pooling halves the temporal axis between blocks; a learned
-  attention-pooling head precedes the linear classifier.}
+  \caption{MSCA-G. An adaptive sensor-graph front-end mixes information across
+  the \num{27} accelerometers; a convolutional stem then feeds $L$ multi-scale
+  convolutional attention (MSCA) blocks with squeeze-and-excitation (SE) and
+  residual connections; max pooling halves the temporal axis between blocks; a
+  learned attention-pooling head precedes the linear classifier.}
   \label{fig:arch}
 \end{figure}
 
@@ -221,7 +249,7 @@ most damage-informative time steps.
 Models are trained with AdamW (learning rate \num{8e-4}, weight decay
 \num{2e-4}), cross-entropy with label smoothing, gradient-norm clipping, and a
 \texttt{ReduceLROnPlateau} schedule on validation macro-F1. The best checkpoint
-is selected by validation macro-F1 with early stopping. MSCA-Net uses
+is selected by validation macro-F1 with early stopping. MSCA-G uses
 $H=\num{128}$, $L=\num{4}$, and dropout \num{0.1}.
 
 \section{Experiments}
@@ -242,8 +270,8 @@ parameter count.
 
 \subsection{Main results}
 \label{sec:results}
-Table~\ref{tab:main} compares MSCA-Net with the baselines on the test set.
-MSCA-Net achieves the highest accuracy and macro-F1 while remaining compact.
+Table~\ref{tab:main} compares MSCA-G with the baselines on the test set.
+MSCA-G achieves the highest accuracy and macro-F1 while remaining compact.
 % NOTE: numbers are auto-filled from outputs/model_results.csv (see scripts).
 
 \begin{table}[t]
@@ -267,41 +295,42 @@ MSCA-Net achieves the highest accuracy and macro-F1 while remaining compact.
     SAMS-TCA-Net   & \underline{89.8} & \underline{89.6} & \underline{89.6} & 0.994 & 1.56 \\
     AGB-Net        & 68.6 & 68.3 & 68.3 & 0.969 & 0.12 \\
     \midrule
-    \textbf{MSCA-Net (ours)} & \bfseries 94.9 & \bfseries 94.8 & \bfseries 94.8 & \bfseries 0.999 & 0.35 \\
+    \textbf{MSCA-G (ours)} & \bfseries 97.7 & \bfseries 97.7 & \bfseries 97.7 & \bfseries 1.000 & 0.35 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \subsection{Ablation study}
 \label{sec:ablation}
-Table~\ref{tab:ablation} removes one component of MSCA-Net at a time. The
-squeeze-and-excitation module is the largest single contributor
-($-3.5$ accuracy points when removed), confirming that channel recalibration is
-important when many sensors carry partially redundant information. The inter-block
-temporal downsampling ($-3.1$) and the learned attention-pooling head ($-2.4$)
-also contribute; downsampling additionally shortens the sequence processed by
+Table~\ref{tab:ablation} removes one component of MSCA-G at a time. Every
+component helps. The attention-pooling head is the largest single contributor
+($-5.1$ accuracy points when removed), and the \emph{adaptive sensor graph} and
+squeeze-and-excitation module each add a further $+3.5$ points, confirming that
+learning the cross-sensor connectivity is as valuable as channel recalibration.
+Inter-block downsampling ($-2.4$) additionally shortens the sequence processed by
 deeper blocks, so it improves accuracy and efficiency together.
 
 \begin{table}[t]
   \centering
-  \caption{Ablation of MSCA-Net components (test set, \num{80}-epoch budget).
+  \caption{Ablation of MSCA-G components (test set, \num{80}-epoch budget).
   $\Delta$ is the accuracy drop relative to the full model.}
   \label{tab:ablation}
   \begin{tabular}{l S[table-format=2.1] S[table-format=2.1] S[table-format=2.1]}
     \toprule
     Variant & {Acc.\,(\%)} & {Macro-F1\,(\%)} & {$\Delta$\,Acc.} \\
     \midrule
-    Full MSCA-Net              & \bfseries 93.7 & \bfseries 93.7 & {--} \\
-    w/o squeeze-and-excitation & 90.2 & 90.2 & -3.5 \\
-    w/o attention pooling      & 91.4 & 91.5 & -2.4 \\
-    w/o downsampling           & 90.6 & 90.7 & -3.1 \\
+    Full MSCA-G                & \bfseries 97.3 & \bfseries 97.2 & {--} \\
+    w/o adaptive sensor graph  & 93.7 & 93.7 & -3.5 \\
+    w/o squeeze-and-excitation & 93.7 & 93.6 & -3.5 \\
+    w/o attention pooling      & 92.2 & 92.2 & -5.1 \\
+    w/o downsampling           & 94.9 & 94.9 & -2.4 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \subsection{Qualitative analysis}
 Figure~\ref{fig:diagnostics} reports the confusion matrix, one-vs-rest ROC
-curves, and a t-SNE projection of the penultimate features for MSCA-Net. The
+curves, and a t-SNE projection of the penultimate features for MSCA-G. The
 confusion matrix is strongly diagonal; the ROC curves show high per-class and
 averaged AUC; and the t-SNE projection forms compact, well-separated clusters,
 indicating a discriminative representation.
@@ -326,14 +355,17 @@ indicating a discriminative representation.
     \includegraphics[width=\linewidth]{msca_history.png}
     \caption{Training history}
   \end{subfigure}
-  \caption{Diagnostics for MSCA-Net on the Z24 test set.}
+  \caption{Diagnostics for MSCA-G on the Z24 test set.}
   \label{fig:diagnostics}
 \end{figure}
 
 \section{Discussion}
 The results indicate that, for this benchmark, careful multi-scale feature
-extraction combined with lightweight attention is more effective and far more
-parameter efficient than larger recurrent or Transformer models. The first-order
+extraction combined with a learned cross-sensor graph and lightweight attention is
+more effective and far more parameter efficient than larger recurrent or
+Transformer models. The adaptive graph adds \num{3.5} accuracy points for roughly
+a thousand extra parameters, supporting the view that explicitly modelling
+inter-sensor relations is valuable for bridge SHM. The first-order
 difference and per-window standardisation remove nuisance amplitude and drift,
 which we found more impactful than heavy data augmentation: light jitter together
 with single-crop evaluation already yields strong, well-calibrated models whose
@@ -342,7 +374,7 @@ evaluation uses a single benchmark with controlled damage; transfer to other
 structures and to continuous monitoring streams is left for future work.
 
 \section{Conclusion}
-We presented MSCA-Net, a compact multi-scale convolutional attention network for
+We presented MSCA-G, a compact multi-scale convolutional attention network for
 vibration-based damage identification. On the Z24 benchmark it outperforms ten
 competing models---eight time-series baselines and two attention/graph
 networks---while using a small parameter budget, and its components
