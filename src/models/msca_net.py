@@ -1,12 +1,11 @@
-"""MSCA-Net: a Multi-Scale Convolutional Attention network.
+"""MSCA-G: a Multi-Scale Convolutional Attention network with an adaptive
+cross-sensor graph.
 
 A compact, high-accuracy convolutional classifier for accelerometer
-time-series. It pairs an InceptionTime-style **multi-scale** feature extractor
-with two lightweight attention mechanisms — **squeeze-and-excitation** channel
-recalibration inside every block and a learned **attention pooling** head — to
-beat the plain CNN/Inception baselines while staying small and easy to train.
-The novelty is moderate by design: well-understood components combined and
-tuned for this task rather than a new mechanism.
+time-series. An adaptive sensor-graph front-end mixes information across the
+sensor channels (the connectivity is learned, not fixed), an InceptionTime-style
+**multi-scale** extractor with **squeeze-and-excitation** channel recalibration
+builds features, and a learned **attention-pooling** head aggregates over time.
 """
 
 from __future__ import annotations
@@ -16,9 +15,15 @@ from typing import Literal
 import torch
 from torch import Tensor, nn
 
-from .sams_tca_net import make_group_norm
-
 InputLayout = Literal["btc", "bct"]
+
+
+def make_group_norm(channels: int, max_groups: int = 8) -> nn.GroupNorm:
+    """Create GroupNorm with a valid group count for the channel size."""
+    groups = min(max_groups, channels)
+    while channels % groups != 0:
+        groups -= 1
+    return nn.GroupNorm(num_groups=groups, num_channels=channels)
 
 
 class SqueezeExcite1d(nn.Module):

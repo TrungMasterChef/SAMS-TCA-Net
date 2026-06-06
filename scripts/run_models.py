@@ -18,7 +18,7 @@ from src.utils import load_config
 def default_config_paths() -> list[Path]:
     """Return the default model comparison config list."""
     return [
-        Path("configs/sams_tca.yaml"),
+        Path("configs/msca_net.yaml"),
         *sorted(Path("configs/baselines").glob("*.yaml")),
     ]
 

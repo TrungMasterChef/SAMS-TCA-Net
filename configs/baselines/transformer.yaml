@@ -42,7 +42,7 @@ data:
 training:
   batch_size: 64
   epochs: 100
-  learning_rate: 0.0005
+  learning_rate: 0.0008
   weight_decay: 0.0001
   device: auto
   checkpoint_path: outputs/baselines/transformer/best.pt
@@ -53,7 +53,7 @@ training:
   metrics_path: outputs/baselines/transformer/metrics.json
   confusion_matrix_npy_path: outputs/baselines/transformer/confusion_matrix.npy
   confusion_matrix_png_path: outputs/baselines/transformer/confusion_matrix.png
-  early_stopping_patience: 10
+  early_stopping_patience: 20
   early_stopping_min_delta: 0.0
   history_plot_path: outputs/baselines/transformer/history.png
   f1_scores_path: outputs/baselines/transformer/f1_scores.csv

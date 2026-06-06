@@ -1,47 +1,37 @@
-# MSCA-G, SAMS-TCA-Net & AGB-Net
+# MSCA-G
 
-PyTorch implementations of three architectures for accelerometer time-series
-classification on the Z24 bridge structural-health-monitoring benchmark:
+PyTorch implementation of **MSCA-G** — a Multi-Scale Convolutional Attention
+network with an **adaptive sensor graph** — for accelerometer time-series
+classification on the Z24 bridge structural-health-monitoring benchmark, together
+with eight standard time-series baselines for a fair comparison.
 
-* **MSCA-G** (proposed) — a Multi-Scale Convolutional Attention network with an
-  **adaptive sensor graph**. A learned cross-sensor graph mixes information among
-  the 27 accelerometers, an InceptionTime-style multi-scale extractor with
-  **squeeze-and-excitation** channel attention extracts features, and a learned
-  **attention-pooling** head aggregates over time. It is the highest-accuracy
-  model here (97.7% test accuracy, see [Results](#results)).
-* **SAMS-TCA-Net** — a pure convolutional attention network (sensor-axis
-  attention, multi-scale residual inception blocks with scale and
-  temporal-channel attention, class-aware pooling).
-* **AGB-Net** — an Adaptive-Graph + BiGRU hybrid with dual spatio-temporal
-  attention. The `C` sensors are treated as nodes of a graph; a graph
-  convolution with a **learned adjacency** mixes information across sensors, a
-  **bidirectional GRU** models temporal dynamics, and **spatial + temporal
-  attention** read-outs produce the final representation. See [Models](#models).
+MSCA-G mixes information across the 27 accelerometers through a *learned*
+cross-sensor graph, extracts features with an InceptionTime-style multi-scale
+backbone and **squeeze-and-excitation** channel attention, and aggregates over
+time with a learned **attention-pooling** head. It reaches the highest accuracy
+here while staying small (~0.35M parameters). See [Results](#results).
 
 ## Structure
 
 ```text
-src/models/msca_net.py         # MSCANet (multi-scale conv + SE + attention pooling)
-src/models/sams_tca_net.py     # SAMSTCANet model
-src/models/graph_bigru.py      # GraphBiGRUNet / AGB-Net (graph + BiGRU hybrid)
-src/models/baselines.py        # SimpleCNN1D, FCN1D, ResNet1D, InceptionTime
-src/data/dataset.py            # X.npy/y.npy dataset, split, normalization, augmentation
-src/train.py                   # training with CrossEntropyLoss
-src/evaluate.py                # Accuracy, Macro-F1, Weighted-F1, ROC-AUC, confusion matrix
-src/utils.py                   # config, metrics, publication-quality plotting
-configs/msca_net.yaml          # MSCA-Net config
-configs/sams_tca.yaml          # SAMS-TCA-Net config
-configs/agb_net.yaml           # AGB-Net config
-tests/                         # forward-pass, ablation, and visualization tests
+src/models/msca_net.py    # MSCANet / MSCA-G (graph + multi-scale conv + SE + attention pooling)
+src/models/baselines.py   # MLP, SimpleCNN, FCN, ResNet, InceptionTime, LSTM, TCN, Transformer
+src/models/factory.py     # build_model from a config dict
+src/data/dataset.py       # X.npy/y.npy dataset, split, normalization, augmentation
+src/train.py              # training with CrossEntropyLoss
+src/evaluate.py           # Accuracy, Macro-F1, Weighted-F1, ROC-AUC, confusion matrix
+src/utils.py              # config, metrics, publication-quality plotting
+configs/msca_net.yaml     # MSCA-G config
+configs/baselines/        # one config per baseline
+configs/ablations_msca_net/  # MSCA-G ablation configs
+tests/                    # forward-pass, ablation, and visualization tests
 ```
 
-## Models
+## Model
 
 All models accept `[B, T, C]` (default) or `[B, C, T]` (`input_layout="bct"`)
-and return logits `[B, num_classes]` without softmax.
-
-**MSCA-G** (`MSCANet` with `use_graph_front: true`) is the recommended,
-highest-accuracy model:
+and return logits `[B, num_classes]` without softmax. **MSCA-G** is
+`MSCANet` with `use_graph_front: true`:
 
 ```text
 input -> adaptive sensor graph (learned adjacency A = softmax(relu(E Eᵀ)), residual mix)
@@ -52,55 +42,36 @@ input -> adaptive sensor graph (learned adjacency A = softmax(relu(E Eᵀ)), res
 ```
 
 The **adaptive sensor graph** learns the cross-sensor connectivity from data
-(damage changes inter-sensor correlations), squeeze-and-excitation recalibrates
-channels inside every block, and the attention-pooling head replaces global
-average pooling. Together they reach 97.7% test accuracy while the network stays
-small (~0.35M params). Ablation flags: `use_graph_front`, `use_se`,
-`use_attention_pool`, `downsample`.
-
-**AGB-Net** (`GraphBiGRUNet`) is the graph hybrid:
-
-```text
-input  -> node temporal encoder (weight-shared 1D convs, downsamples T)   [B, T', N, F]
-       -> adaptive graph convolution  (learned adjacency A = softmax(relu(E Eᵀ)))
-       -> spatial attention over sensors                                  [B, T', F]
-       -> bidirectional GRU over time                                     [B, T', 2H]
-       -> temporal attention over time                                    [B, 2H]
-       -> classifier
-```
-
-Its **learned adjacency** is the main novelty: damage changes the correlation
-structure between sensors, so a data-driven graph (no physical coordinates
-required) can adapt to it where a fixed graph cannot. Ablation flags:
-`use_graph`, `use_adaptive_graph`, `use_spatial_attention`,
-`use_temporal_attention`, `bidirectional`.
+(damage changes inter-sensor correlations, so a fixed wiring cannot capture it),
+squeeze-and-excitation recalibrates channels inside every block, and the
+attention-pooling head replaces global average pooling. Ablation flags:
+`use_graph_front`, `use_se`, `use_attention_pool`, `downsample`.
 
 ## Results
 
 Test-set performance on the Z24 benchmark (17 classes, held-out test split, all
-models trained under identical preprocessing; `outputs/model_results.csv`):
+models trained under the **same** preprocessing and training schedule;
+`outputs/model_results.csv`):
 
 | Model | Acc. (%) | Macro-F1 (%) | ROC-AUC | Params |
 |---|---:|---:|---:|---:|
-| **MSCA-G (ours)** | **97.7** | **97.7** | **1.000** | 0.35M |
-| SAMS-TCA-Net | 89.8 | 89.6 | 0.994 | 1.56M |
-| TCN | 87.5 | 87.5 | 0.993 | 0.33M |
-| 1D-CNN | 84.3 | 83.8 | 0.991 | 0.11M |
-| AGB-Net | 68.6 | 68.3 | 0.969 | 0.12M |
-| InceptionTime | 64.3 | 64.1 | 0.964 | 0.06M |
-| FCN | 60.8 | 60.4 | 0.955 | 0.29M |
-| ResNet-1D | 52.6 | 49.9 | 0.953 | 1.55M |
-| Transformer | 52.6 | 51.4 | 0.936 | 0.16M |
-| LSTM | 45.5 | 44.3 | 0.926 | 0.56M |
-| MLP | 11.8 | 10.0 | 0.641 | 0.29M |
+| **MSCA-G (ours)** | **97.2** | **97.2** | **1.000** | 0.35M |
+| ResNet-1D | 96.9 | 96.8 | 0.999 | 1.55M |
+| InceptionTime | 93.3 | 93.3 | 0.999 | 0.06M |
+| FCN | 92.2 | 92.2 | 0.994 | 0.29M |
+| TCN | 87.5 | 87.7 | 0.992 | 0.33M |
+| 1D-CNN | 78.4 | 78.2 | 0.984 | 0.11M |
+| Transformer | 69.0 | 69.0 | 0.964 | 0.16M |
+| LSTM | 39.6 | 39.2 | 0.904 | 0.56M |
+| MLP | 14.1 | 12.3 | 0.650 | 0.29M |
 
-MSCA-G is the most accurate model by a clear margin (+7.9 accuracy points over the
-next best) while using ~4× fewer parameters; the adaptive sensor graph alone adds
+All models use the **same** preprocessing and training schedule (epoch=100). The
+closest competitor is a well-tuned ResNet-1D (96.9%), which MSCA-G matches and
+slightly exceeds using ~4× fewer parameters; the adaptive sensor graph alone adds
 +3.5 points (ablation) for ~1k extra parameters. Training uses light augmentation
 and single-crop evaluation, so the curves follow the conventional
 train-above-validation pattern (MSCA-G: train acc ≈ 0.997, val acc ≈ 0.982). A
-LaTeX write-up is in [`paper/`](paper/). Reproduce with
-`python scripts/run_models.py` (see below).
+LaTeX write-up is in [`paper/`](paper/).
 
 ## Install
 
@@ -119,179 +90,108 @@ src/data/Z24-dataset-processed/inputs.npy  # shape [N, C, T]
 src/data/Z24-dataset-processed/labels.npy  # shape [N]
 ```
 
-For your local copy of `thanglexuan/Z24-dataset-processed`, the detected shape is:
+The detected shape for `thanglexuan/Z24-dataset-processed` is `inputs.npy:
+[1530, 27, 6000]`, `labels.npy: [1530]`. Set `data.input_layout: nct` when the
+source array is `[N, C, T]` (or `ntc` for `[N, T, C]`). Splits are deterministic
+and stratified by label at the sequence level; train statistics are computed from
+the train split only.
 
-```text
-inputs.npy: [1530, 27, 6000]
-labels.npy: [1530]
-```
-
-Set `data.input_layout: nct` when the source array is `[N, C, T]`. Set it to `ntc` when the source array is `[N, T, C]`.
-
-The dataset class creates deterministic train/val/test splits, computes mean/std from the train split only, converts source arrays to `[N, T, C]`, and returns tensors shaped `[T, C]`. PyTorch `DataLoader` batches are therefore `[B, T, C]`.
-
-Augmentation options for training include jitter, scaling, and time masking.
-
-The default configs use the crop-based preprocessing protocol:
+All configs share one **fair-comparison** preprocessing and training schedule:
 
 ```yaml
-normalization: sample
+# data
+normalization: sample      # per-window standardisation
+transform: diff            # first-order temporal difference
 window_mode: crop
-window_length: 768
-hop_length: 384
+window_length: 768         # random crop (train) / centre crop (eval)
 crop_mode: random_train_center_eval
-temporal_stride: 1
-taper: none
-bandpass_filter: false
-sampling_rate: 100.0
-lowcut: 0.5
-highcut: 40.0
-filter_order: 4
-transform: diff
 eval_num_crops: 1
-```
-
-This trains on short random 768-sample windows, evaluates on the deterministic centre crop, normalizes each sample/window independently, and uses temporal differences rather than raw amplitude. The default configs use `model.num_channels: 27`.
-
-The default SAMS-TCA-Net config also uses GroupNorm, label smoothing, gradient clipping, and ReduceLROnPlateau scheduling on validation Macro-F1 to reduce validation instability.
-
-Splits are stratified by label at the original sequence level before crop/window extraction. Training augmentation is configurable through:
-
-```yaml
-augment: true
+augment: true              # light only:
 jitter_std: 0.005
 scaling_std: 0.0
 time_mask_ratio: 0.0
 channel_mask_ratio: 0.0
+# training
+batch_size: 64
+epochs: 100
+learning_rate: 0.0008
+weight_decay: 0.0001
+early_stopping_patience: 20
+scheduler: reduce_on_plateau
+label_smoothing: 0.05
+gradient_clip_norm: 1.0
 ```
 
-Augmentation is intentionally light (only small Gaussian jitter): combined with single-crop evaluation this keeps training and validation accuracies measured under comparable conditions, so the training curves follow the conventional train-above-validation pattern. Stronger masking/scaling is available but disabled by default.
+Augmentation is intentionally light and evaluation is single-crop, so training
+and validation accuracies are measured under comparable conditions (the curves
+follow the conventional train-above-validation pattern). If `inputs.npy`/
+`labels.npy` are absent, training falls back to dummy data so the pipeline still
+runs.
 
 ## Train
 
 ```bash
-python -m src.train --config configs/msca_net.yaml   # MSCA-Net (recommended)
-python -m src.train --config configs/sams_tca.yaml   # SAMS-TCA-Net
-python -m src.train --config configs/agb_net.yaml     # AGB-Net
+python -m src.train --config configs/msca_net.yaml                    # MSCA-G (recommended)
+python -m src.train --config configs/baselines/tcn_1d.yaml           # any baseline
 ```
 
-If `X.npy` and `y.npy` are not found, training falls back to dummy data so the pipeline can still run.
+The best checkpoint is selected by validation Macro-F1 with early stopping.
+Training writes `history.csv`, `history.png`, `training_log.txt`, `best.pt`,
+`last.pt`, and validation confusion-matrix artifacts under the config's output
+directory (e.g. `outputs/msca_net/`).
 
-Training writes:
-
-```text
-outputs/sams_tca/history.csv
-outputs/sams_tca/history.png
-outputs/sams_tca/training_log.txt
-outputs/sams_tca/best.pt
-outputs/sams_tca/last.pt
-outputs/sams_tca/val_confusion_matrix.npy
-outputs/sams_tca/val_confusion_matrix.png
-outputs/sams_tca/val_f1_scores.csv
-```
-
-The best checkpoint is selected by validation Macro-F1. Early stopping is controlled by `training.early_stopping_patience`.
-
-Baseline configs are available under `configs/baselines/`:
-
-```bash
-python -m src.train --config configs/baselines/simple_cnn_1d.yaml
-python -m src.train --config configs/baselines/fcn_1d.yaml
-python -m src.train --config configs/baselines/resnet_1d.yaml
-python -m src.train --config configs/baselines/inception_time_baseline.yaml
-```
-
-Each config selects the model through `model.name`.
-
-Run SAMS-TCA-Net and all baseline configs sequentially:
+Run MSCA-G and all baselines sequentially and write a summary table to
+`outputs/model_results.csv`:
 
 ```bash
 python scripts/run_models.py
 ```
 
-This writes a summary table to `outputs/model_results.csv`. Each model keeps its own artifacts, for example `outputs/baselines/simple_cnn_1d/`.
-
 ## Ablations
 
-SAMS-TCA-Net ablation flags are configured under `model`:
-
-```yaml
-use_sensor_attention: true
-use_scale_attention: true
-use_temporal_channel_attention: true
-use_class_aware_pooling: true
-```
-
-When `use_class_aware_pooling` is `false`, the model uses global average pooling plus a linear classifier.
-
-Run all ablation configs and save metrics to `outputs/ablation_results.csv`:
-
-```bash
-python scripts/run_ablations.py
-```
-
-MSCA-G and AGB-Net ablations live under `configs/ablations_msca_net/` (full,
-`no_graph`, `no_se`, `no_attention_pool`, `no_downsample`) and `configs/ablations_agb_net/`
-(full, `no_graph`, `fixed_graph`, `no_spatial_attention`,
-`no_temporal_attention`, `unidirectional`). The script records every boolean
-model flag automatically:
+MSCA-G ablation configs live under `configs/ablations_msca_net/` (`full`,
+`no_graph`, `no_se`, `no_attention_pool`, `no_downsample`). The script records
+every boolean model flag automatically:
 
 ```bash
 python scripts/run_ablations.py --config-dir configs/ablations_msca_net \
   --output-csv outputs/ablation_results_msca_net.csv
-python scripts/run_ablations.py --config-dir configs/ablations_agb_net \
-  --output-csv outputs/ablation_results_agb_net.csv
 ```
 
 ## Evaluate
 
 ```bash
-python -m src.evaluate --config configs/sams_tca.yaml --checkpoint outputs/sams_tca/best.pt
+python -m src.evaluate --config configs/msca_net.yaml --checkpoint outputs/msca_net/best.pt
 ```
 
-The evaluation script reports Accuracy, Macro-F1, Weighted-F1, and the confusion matrix.
-
-Evaluation writes:
-
-```text
-outputs/sams_tca/metrics.json
-outputs/sams_tca/confusion_matrix.npy
-outputs/sams_tca/confusion_matrix.png
-outputs/sams_tca/f1_scores.csv
-outputs/sams_tca/roc_curve.png
-outputs/sams_tca/tsne.png
-```
-
-Metrics include the model parameter count and ROC-AUC scores (`roc_auc_macro`, `roc_auc_micro`, `roc_auc_weighted`).
+Reports Accuracy, Macro-F1, Weighted-F1, ROC-AUC, and the confusion matrix, and
+writes `metrics.json`, `confusion_matrix.{npy,png}`, `f1_scores.csv`,
+`roc_curve.png`, and `tsne.png` under the config's output directory.
 
 ## Figures
 
-All figures are written at 200 DPI with a shared publication style:
+All figures are written at 300 DPI with a shared, publication-grade style:
 
 * **Confusion matrix** — coloured by per-true-class proportion (the diagonal
-  stays legible regardless of class support), annotated with raw counts, with
-  the overall accuracy in the title.
-* **Training history** — a 2×2 grid (loss, accuracy, macro-F1, MCC) with the
-  best validation epoch marked.
+  stays legible regardless of class support), annotated with raw counts, overall
+  accuracy in the title.
+* **Training history** — a 2×2 grid (loss, accuracy, macro-F1, MCC) with the best
+  validation epoch marked.
 * **ROC curves** — per-class one-vs-rest curves with macro- and micro-averages.
-* **t-SNE** — test embeddings with a discrete per-class legend.
+* **t-SNE** — learned features with a discrete per-class legend.
 
-Re-render the confusion matrices and history plots of every existing run with
-the current style, without retraining or re-evaluating:
+Re-render saved confusion matrices and history plots with the current style
+(without retraining):
 
 ```bash
 python scripts/regenerate_figures.py
 ```
 
 ROC and t-SNE plots require stored probabilities, so they are produced by
-`src.evaluate` rather than by this script.
+`src.evaluate`.
 
 ## Test
 
 ```bash
 pytest
 ```
-
-## Model
-
-`SAMSTCANet` accepts `[B, T, C]` by default and can also accept `[B, C, T]` with `input_layout="bct"`. The forward pass returns logits shaped `[B, num_classes]` and does not apply softmax.

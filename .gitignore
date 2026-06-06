@@ -10,12 +10,14 @@ outputs/**/*.csv
 outputs/**/*.json
 outputs/**/*.npy
 outputs/**/*.png
+outputs/**/*.pdf
 outputs/**/*.txt
 outputs/*.pt
 outputs/*.csv
 outputs/*.json
 outputs/*.npy
 outputs/*.png
+outputs/*.pdf
 outputs/*.txt
 
 # LaTeX build artifacts (keep sources + figures + main.pdf)

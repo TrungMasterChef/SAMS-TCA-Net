@@ -55,13 +55,14 @@ idea: because damage changes the correlation structure between sensors, a
 data-driven adjacency---needing no physical coordinates---adapts to it where a
 fixed wiring cannot. Evaluated on the Z24 bridge benchmark (\num{1530}
 recordings, \num{27} sensor channels, \num{17} damage classes), MSCA-G attains a
-test accuracy of \result{97.7}\% and a macro-F1 of \result{97.7}\%, outperforming
+test accuracy of \result{97.2}\% and a macro-F1 of \result{97.2}\%, the best among
 eight standard time-series baselines (MLP, 1D-CNN, FCN, ResNet, InceptionTime,
-LSTM, TCN, and a Transformer encoder) as well as two stronger attention/graph
-networks, while using only \result{0.35}\,M parameters. An ablation study shows
-that the adaptive graph, SE attention, attention-pooling head, and inter-block
-downsampling each contribute to the final accuracy. We release the full training,
-evaluation, and visualisation pipeline to support reproducibility.
+LSTM, TCN, and a Transformer encoder) trained under an identical protocol, while
+using only \result{0.35}\,M parameters---about a quarter of those of the
+next-best model (ResNet-1D, \result{96.9}\%). An ablation study shows that the adaptive
+graph, SE attention, attention-pooling head, and inter-block downsampling each
+contribute to the final accuracy. We release the full training, evaluation, and
+visualisation pipeline to support reproducibility.
 
 \vspace{0.5em}
 \noindent\textbf{Keywords:} structural health monitoring; damage detection;
@@ -99,10 +100,11 @@ mechanisms. Our contributions are:
   convolution, squeeze-and-excitation channel attention, and learned temporal
   attention pooling for damage-state classification (Section~\ref{sec:method}).
   \item A rigorous, reproducible evaluation on the Z24 bridge benchmark against
-  ten competing models under an identical preprocessing and training protocol
-  (Section~\ref{sec:experiments}), where MSCA-G achieves the best accuracy and
-  macro-F1 with a small parameter budget, plus an ablation study and
-  confusion-matrix, ROC, and t-SNE analyses of the learned representation.
+  eight standard time-series baselines under an identical preprocessing and
+  training protocol (Section~\ref{sec:experiments}), where MSCA-G achieves the
+  best accuracy and macro-F1 with a small parameter budget, plus an ablation
+  study and confusion-matrix, ROC, and t-SNE analyses of the learned
+  representation.
 \end{enumerate}
 
 \section{Related Work}
@@ -271,8 +273,11 @@ parameter count.
 \subsection{Main results}
 \label{sec:results}
 Table~\ref{tab:main} compares MSCA-G with the baselines on the test set.
-MSCA-G achieves the highest accuracy and macro-F1 while remaining compact.
-% NOTE: numbers are auto-filled from outputs/model_results.csv (see scripts).
+MSCA-G achieves the highest accuracy (\result{97.2}\%) and macro-F1. The closest
+competitor is a strong ResNet-1D (\result{96.9}\%), which MSCA-G matches and
+slightly exceeds using about \emph{a quarter} of its parameters
+(\result{0.35} vs \result{1.55}\,M); the remaining baselines trail by a wide
+margin under the same protocol.
 
 \begin{table}[t]
   \centering
@@ -284,46 +289,44 @@ MSCA-G achieves the highest accuracy and macro-F1 while remaining compact.
     \toprule
     Model & {Acc.\,(\%)} & {Macro-F1\,(\%)} & {W-F1\,(\%)} & {ROC-AUC} & {Params\,(M)} \\
     \midrule
-    MLP            & 11.8 & 10.0 & 10.0 & 0.641 & 0.29 \\
-    1D-CNN         & 84.3 & 83.8 & 83.8 & 0.991 & 0.11 \\
-    FCN            & 60.8 & 60.4 & 60.4 & 0.955 & 0.29 \\
-    ResNet-1D      & 52.6 & 49.9 & 49.9 & 0.953 & 1.55 \\
-    InceptionTime  & 64.3 & 64.1 & 64.1 & 0.964 & 0.06 \\
-    LSTM           & 45.5 & 44.3 & 44.3 & 0.926 & 0.56 \\
-    TCN            & 87.5 & 87.5 & 87.5 & 0.993 & 0.33 \\
-    Transformer    & 52.6 & 51.4 & 51.4 & 0.936 & 0.16 \\
-    SAMS-TCA-Net   & \underline{89.8} & \underline{89.6} & \underline{89.6} & 0.994 & 1.56 \\
-    AGB-Net        & 68.6 & 68.3 & 68.3 & 0.969 & 0.12 \\
+    MLP            & 14.1 & 12.3 & 12.3 & 0.650 & 0.29 \\
+    LSTM           & 39.6 & 39.2 & 39.2 & 0.904 & 0.56 \\
+    Transformer    & 69.0 & 69.0 & 69.0 & 0.964 & 0.16 \\
+    1D-CNN         & 78.4 & 78.2 & 78.2 & 0.984 & 0.11 \\
+    TCN            & 87.5 & 87.7 & 87.7 & 0.992 & 0.33 \\
+    FCN            & 92.2 & 92.2 & 92.2 & 0.994 & 0.29 \\
+    InceptionTime  & 93.3 & 93.3 & 93.3 & 0.999 & 0.06 \\
+    ResNet-1D      & \underline{96.9} & \underline{96.8} & \underline{96.8} & 0.999 & 1.55 \\
     \midrule
-    \textbf{MSCA-G (ours)} & \bfseries 97.7 & \bfseries 97.7 & \bfseries 97.7 & \bfseries 1.000 & 0.35 \\
+    \textbf{MSCA-G (ours)} & \bfseries 97.2 & \bfseries 97.2 & \bfseries 97.2 & \bfseries 1.000 & 0.35 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \subsection{Ablation study}
 \label{sec:ablation}
-Table~\ref{tab:ablation} removes one component of MSCA-G at a time. Every
-component helps. The attention-pooling head is the largest single contributor
-($-5.1$ accuracy points when removed), and the \emph{adaptive sensor graph} and
-squeeze-and-excitation module each add a further $+3.5$ points, confirming that
-learning the cross-sensor connectivity is as valuable as channel recalibration.
-Inter-block downsampling ($-2.4$) additionally shortens the sequence processed by
-deeper blocks, so it improves accuracy and efficiency together.
+Table~\ref{tab:ablation} removes one component of MSCA-G at a time; every
+component helps. Inter-block downsampling is the largest contributor
+($-11.8$ accuracy points when removed, as deeper blocks must then process the
+full-length sequence), followed by squeeze-and-excitation ($-6.3$) and the
+attention-pooling head ($-5.1$). The \emph{adaptive sensor graph} adds a further
+$+3.5$ points for only $\sim$1k parameters, confirming that learning the
+cross-sensor connectivity is genuinely useful for this task.
 
 \begin{table}[t]
   \centering
-  \caption{Ablation of MSCA-G components (test set, \num{80}-epoch budget).
+  \caption{Ablation of MSCA-G components (test set, same epoch=100 protocol).
   $\Delta$ is the accuracy drop relative to the full model.}
   \label{tab:ablation}
   \begin{tabular}{l S[table-format=2.1] S[table-format=2.1] S[table-format=2.1]}
     \toprule
     Variant & {Acc.\,(\%)} & {Macro-F1\,(\%)} & {$\Delta$\,Acc.} \\
     \midrule
-    Full MSCA-G                & \bfseries 97.3 & \bfseries 97.2 & {--} \\
+    Full MSCA-G                & \bfseries 97.2 & \bfseries 97.2 & {--} \\
     w/o adaptive sensor graph  & 93.7 & 93.7 & -3.5 \\
-    w/o squeeze-and-excitation & 93.7 & 93.6 & -3.5 \\
-    w/o attention pooling      & 92.2 & 92.2 & -5.1 \\
-    w/o downsampling           & 94.9 & 94.9 & -2.4 \\
+    w/o squeeze-and-excitation & 91.0 & 90.9 & -6.3 \\
+    w/o attention pooling      & 92.2 & 92.1 & -5.1 \\
+    w/o downsampling           & 85.5 & 85.5 & -11.8 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -360,12 +363,14 @@ indicating a discriminative representation.
 \end{figure}
 
 \section{Discussion}
-The results indicate that, for this benchmark, careful multi-scale feature
-extraction combined with a learned cross-sensor graph and lightweight attention is
-more effective and far more parameter efficient than larger recurrent or
-Transformer models. The adaptive graph adds \num{3.5} accuracy points for roughly
-a thousand extra parameters, supporting the view that explicitly modelling
-inter-sensor relations is valuable for bridge SHM. The first-order
+The results indicate that, for this benchmark, convolutional models dominate:
+a well-tuned ResNet-1D is a strong competitor, yet MSCA-G matches and slightly
+exceeds it with roughly a quarter of the parameters by combining multi-scale
+features, a learned cross-sensor graph, and lightweight attention. The adaptive
+graph adds \num{3.5} accuracy points for roughly a thousand extra parameters,
+supporting the view that explicitly modelling inter-sensor relations is valuable
+for bridge SHM. Recurrent and Transformer baselines lag well behind under the
+same budget. The first-order
 difference and per-window standardisation remove nuisance amplitude and drift,
 which we found more impactful than heavy data augmentation: light jitter together
 with single-crop evaluation already yields strong, well-calibrated models whose
@@ -375,10 +380,10 @@ structures and to continuous monitoring streams is left for future work.
 
 \section{Conclusion}
 We presented MSCA-G, a compact multi-scale convolutional attention network for
-vibration-based damage identification. On the Z24 benchmark it outperforms ten
-competing models---eight time-series baselines and two attention/graph
-networks---while using a small parameter budget, and its components
-are individually justified by an ablation study. The complete, reproducible
+vibration-based damage identification. On the Z24 benchmark it outperforms eight
+standard time-series baselines under an identical protocol while using a small
+parameter budget, and its components are individually justified by an ablation
+study. The complete, reproducible
 pipeline (data handling, training, evaluation, and publication-quality figures)
 is released with this paper.
 

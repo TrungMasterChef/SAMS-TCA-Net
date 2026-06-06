@@ -172,25 +172,37 @@ def save_json(path: str | Path, payload: dict[str, Any]) -> None:
         json.dump(payload, f, indent=2)
 
 
-# Shared matplotlib style for SCIE-grade publication figures.
+# Shared matplotlib style for SCIE-grade publication figures (modern aesthetic:
+# light panel background, bold dark spines, dashed grid, minor ticks).
 _PAPER_STYLE: dict[str, Any] = {
     "figure.dpi": 120,
     "savefig.dpi": 300,
     "figure.facecolor": "white",
     "savefig.facecolor": "white",
-    "axes.facecolor": "white",
+    "axes.facecolor": "#f8f9fa",
     "axes.edgecolor": "#333333",
-    "axes.linewidth": 0.9,
+    "axes.linewidth": 1.5,
     "axes.titlesize": 13,
     "axes.titleweight": "bold",
     "axes.labelsize": 12,
+    "axes.labelweight": "bold",
+    "axes.axisbelow": True,
+    "axes.grid": True,
     "xtick.labelsize": 9.5,
     "ytick.labelsize": 9.5,
-    "xtick.major.width": 0.8,
-    "ytick.major.width": 0.8,
+    "xtick.major.width": 1.5,
+    "ytick.major.width": 1.5,
+    "grid.color": "#d0d0d0",
+    "grid.linestyle": "--",
+    "grid.linewidth": 0.8,
+    "grid.alpha": 0.7,
     "legend.fontsize": 9.5,
-    "legend.frameon": False,
-    "font.family": "DejaVu Sans",
+    "legend.framealpha": 0.95,
+    "legend.edgecolor": "#cccccc",
+    "legend.fancybox": True,
+    "legend.shadow": True,
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Arial", "DejaVu Sans", "Liberation Sans", "sans-serif"],
     "mathtext.default": "regular",
     "axes.unicode_minus": False,
 }
@@ -253,6 +265,7 @@ def save_confusion_matrix_png(
         ax.set_xticklabels(names, rotation=rotation, ha="right" if rotation else "center")
         ax.set_yticklabels(names)
 
+        ax.grid(False, which="major")
         ax.set_xticks(np.arange(-0.5, num_classes, 1), minor=True)
         ax.set_yticks(np.arange(-0.5, num_classes, 1), minor=True)
         ax.grid(which="minor", color="white", linewidth=0.6)
@@ -416,6 +429,7 @@ def save_tsne_png(
 
     import matplotlib.pyplot as plt
     from sklearn.manifold import TSNE
+    from sklearn.metrics import silhouette_score
 
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -425,6 +439,15 @@ def save_tsne_png(
         indices = rng.choice(features.shape[0], size=max_points, replace=False)
         features = features[indices]
         labels = labels[indices]
+
+    # Silhouette score on the high-dimensional features (true clustering quality;
+    # computing it on the 2D t-SNE embedding would be misleading).
+    silhouette: float | None = None
+    if len(np.unique(labels)) > 1:
+        try:
+            silhouette = float(silhouette_score(features, labels))
+        except ValueError:
+            silhouette = None
 
     perplexity = min(30, max(2, (features.shape[0] - 1) // 3))
     embedding = TSNE(
@@ -454,11 +477,15 @@ def save_tsne_png(
                 edgecolors="white",
                 linewidths=0.25,
             )
-        ax.set_title(f"t-SNE of learned features ({len(classes)} classes, n = {features.shape[0]})")
+        silhouette_text = f", silhouette = {silhouette:.3f}" if silhouette is not None else ""
+        ax.set_title(
+            f"t-SNE of learned features ({len(classes)} classes, n = {features.shape[0]}{silhouette_text})"
+        )
         ax.set_xlabel("t-SNE dimension 1")
         ax.set_ylabel("t-SNE dimension 2")
         ax.set_xticks([])
         ax.set_yticks([])
+        ax.grid(False)
         ax.legend(
             title="Class",
             loc="center left",
