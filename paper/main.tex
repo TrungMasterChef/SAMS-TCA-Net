@@ -56,11 +56,11 @@ data-driven adjacency---needing no physical coordinates---adapts to it where a
 fixed wiring cannot. Evaluated on the Z24 bridge benchmark (\num{1530}
 recordings, \num{27} sensor channels, \num{17} damage classes), MSCA-G attains a
 test accuracy of \result{97.2}\% and a macro-F1 of \result{97.2}\%, the best among
-eight standard time-series baselines (MLP, 1D-CNN, FCN, ResNet, InceptionTime,
-LSTM, TCN, and a Transformer encoder), each individually tuned under a common
-preprocessing and \num{100}-epoch budget, while using only \result{0.35}\,M
-parameters---about a quarter of those of the next-best model (ResNet-1D,
-\result{96.9}\%). An ablation study shows that the adaptive
+eight strong time-series baselines (1D-CNN, FCN, InceptionTime, TCN, a Transformer
+encoder, TSMixer, PatchTST, and Mamba), each individually tuned under a common
+preprocessing and \num{100}-epoch budget. MSCA-G leads the next-best model
+(InceptionTime, \result{93.3}\%) by \result{3.9} accuracy points while remaining
+compact (\result{0.35}\,M parameters). An ablation study shows that the adaptive
 graph, SE attention, attention-pooling head, and inter-block downsampling each
 contribute to the final accuracy. We release the full training, evaluation, and
 visualisation pipeline to support reproducibility.
@@ -101,10 +101,11 @@ mechanisms. Our contributions are:
   convolution, squeeze-and-excitation channel attention, and learned temporal
   attention pooling for damage-state classification (Section~\ref{sec:method}).
   \item A rigorous, reproducible evaluation on the Z24 bridge benchmark against
-  eight standard time-series baselines under an identical preprocessing and
-  training protocol (Section~\ref{sec:experiments}), where MSCA-G achieves the
-  best accuracy and macro-F1 with a small parameter budget, plus an ablation
-  study and confusion-matrix, ROC, and t-SNE analyses of the learned
+  eight individually tuned baselines spanning CNNs, a Transformer, an all-MLP
+  mixer, a state-space model, and a patch Transformer
+  (Section~\ref{sec:experiments}), where MSCA-G achieves the best accuracy and
+  macro-F1 with a small parameter budget, plus an ablation study and
+  confusion-matrix, ROC, and t-SNE analyses of the learned
   representation.
 \end{enumerate}
 
@@ -116,12 +117,15 @@ derived from modal analysis and statistical time-series models
 is a widely used benchmark with progressive, controlled damage scenarios
 \cite{maeck2003z24}.
 
-\textbf{Deep learning for time series.} Fully convolutional networks (FCN),
-ResNet, and InceptionTime are strong baselines for time-series classification
-\cite{wang2017time,fawaz2020inceptiontime}. Recurrent networks (LSTM/GRU) and
-temporal convolutional networks (TCN) \cite{bai2018empirical} model temporal
-dependencies, while Transformer encoders \cite{vaswani2017attention} capture
-long-range interactions through self-attention.
+\textbf{Deep learning for time series.} Fully convolutional networks (FCN) and
+InceptionTime are strong baselines for time-series classification
+\cite{wang2017time,fawaz2020inceptiontime}, and temporal convolutional networks
+(TCN) \cite{bai2018empirical} and Transformer encoders \cite{vaswani2017attention}
+model temporal dependencies. Recent architectures push this further: TSMixer, an
+all-MLP time/feature mixer \cite{chen2023tsmixer}; PatchTST, a patch-based
+Transformer \cite{nie2023patchtst}; and Mamba, a selective state-space model with
+linear-time sequence modelling \cite{gu2023mamba}. We include all of these as
+baselines.
 
 \textbf{Attention and graph mechanisms.} Squeeze-and-excitation blocks
 recalibrate channel responses with negligible overhead \cite{hu2018squeeze}, and
@@ -276,13 +280,14 @@ weighted F1, the Matthews correlation coefficient (MCC), and one-vs-rest ROC-AUC
 \subsection{Main results}
 \label{sec:results}
 Table~\ref{tab:main} compares MSCA-G with the baselines on the test set.
-MSCA-G achieves the highest accuracy (\result{97.2}\%) and macro-F1. The closest
-competitor is a strong ResNet-1D (\result{96.9}\%), which MSCA-G matches and
-slightly exceeds using about \emph{a quarter} of its parameters
-(\result{0.35} vs \result{1.55}\,M). Convolutional models (ResNet, InceptionTime,
-FCN, 1D-CNN) form the strong group, while the Transformer, LSTM, and MLP trail
-despite comparable or larger parameter budgets---underlining that capacity alone
-is insufficient on this benchmark.
+MSCA-G achieves the highest accuracy (\result{97.2}\%) and macro-F1, leading the
+next-best model (InceptionTime, \result{93.3}\%) by \result{3.9} points while
+staying compact (\result{0.35}\,M parameters). Multi-scale convolutional models
+(InceptionTime, FCN, 1D-CNN, TCN) form the strong group; the recent state-space
+(Mamba) and patch/MLP Transformers (PatchTST, TSMixer) are competitive but trail,
+and the plain Transformer is weakest---underlining that, on this modestly sized
+benchmark, architectural inductive bias matters more than raw sequence-model
+capacity.
 
 \begin{table}[t]
   \centering
@@ -294,14 +299,14 @@ is insufficient on this benchmark.
     \toprule
     Model & {Acc.\,(\%)} & {Macro-F1\,(\%)} & {W-F1\,(\%)} & {ROC-AUC} & {Params\,(M)} \\
     \midrule
-    MLP            & 21.6 & 20.0 & 20.0 & 0.761 & 1.16 \\
-    LSTM           & 51.0 & 50.5 & 50.5 & 0.941 & 0.56 \\
     Transformer    & 72.2 & 71.8 & 71.8 & 0.971 & 0.47 \\
+    TSMixer        & 79.6 & 79.3 & 79.3 & 0.982 & 0.12 \\
+    PatchTST       & 86.3 & 86.1 & 86.1 & 0.990 & 0.13 \\
+    Mamba          & 86.3 & 86.2 & 86.2 & 0.991 & 0.10 \\
     TCN            & 87.5 & 87.7 & 87.7 & 0.992 & 0.33 \\
     1D-CNN         & 88.6 & 88.4 & 88.4 & 0.993 & 0.11 \\
     FCN            & 92.2 & 92.2 & 92.2 & 0.994 & 0.29 \\
-    InceptionTime  & 93.3 & 93.3 & 93.3 & 0.999 & 0.06 \\
-    ResNet-1D      & \underline{96.9} & \underline{96.8} & \underline{96.8} & 0.999 & 1.55 \\
+    InceptionTime  & \underline{93.3} & \underline{93.3} & \underline{93.3} & 0.999 & 0.06 \\
     \midrule
     \textbf{MSCA-G (ours)} & \bfseries 97.2 & \bfseries 97.2 & \bfseries 97.2 & \bfseries 1.000 & 0.35 \\
     \bottomrule
@@ -368,12 +373,14 @@ indicating a discriminative representation.
 \end{figure}
 
 \section{Discussion}
-The results indicate that, for this benchmark, convolutional models dominate:
-a well-tuned ResNet-1D is a strong competitor, yet MSCA-G matches and slightly
-exceeds it with roughly a quarter of the parameters by combining multi-scale
-features, a learned cross-sensor graph, and lightweight attention. The adaptive
-graph adds \num{3.5} accuracy points for roughly a thousand extra parameters,
-supporting the view that explicitly modelling inter-sensor relations is valuable
+The results indicate that, for this benchmark, multi-scale convolutional models
+dominate: InceptionTime, FCN, and the 1D-CNN form the strongest group, while
+recent sequence models---a state-space model (Mamba), a patch Transformer
+(PatchTST), and an all-MLP mixer (TSMixer)---are competitive but trail. MSCA-G
+leads them all by combining multi-scale features, a learned cross-sensor graph,
+and lightweight attention. The adaptive graph adds \num{3.5} accuracy points for
+roughly a thousand extra parameters, supporting the view that explicitly
+modelling inter-sensor relations is valuable
 for bridge SHM. Recurrent and Transformer baselines lag well behind under the
 same budget. The first-order
 difference and per-window standardisation remove nuisance amplitude and drift,

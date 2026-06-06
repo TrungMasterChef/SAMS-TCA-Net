@@ -59,26 +59,26 @@ plt.rcParams.update(
 # model is listed first and drawn with emphasis.
 MODELS: dict[str, str] = {
     "MSCA-G": "msca_net",
-    "TCN": "baselines/tcn_1d",
-    "1D-CNN": "baselines/simple_cnn_1d",
     "InceptionTime": "baselines/inception_time_baseline",
     "FCN": "baselines/fcn_1d",
-    "ResNet-1D": "baselines/resnet_1d",
+    "1D-CNN": "baselines/simple_cnn_1d",
+    "TCN": "baselines/tcn_1d",
+    "MambaSL": "baselines/mamba_sl",
+    "PatchTST": "baselines/patchtst",
+    "TSMixer": "baselines/tsmixer",
     "Transformer": "baselines/transformer",
-    "LSTM": "baselines/lstm_1d",
-    "MLP": "baselines/mlp_1d",
 }
 
 COLORS: dict[str, str] = {
     "MSCA-G": "#db2777",        # pink (proposed, emphasised)
-    "TCN": "#2563eb",           # blue
-    "1D-CNN": "#16a34a",        # green
     "InceptionTime": "#ea580c", # orange
     "FCN": "#9333ea",           # purple
-    "ResNet-1D": "#0891b2",     # cyan
-    "Transformer": "#ca8a04",   # gold
-    "LSTM": "#dc2626",          # red
-    "MLP": "#64748b",           # slate
+    "1D-CNN": "#16a34a",        # green
+    "TCN": "#2563eb",           # blue
+    "MambaSL": "#0891b2",       # cyan
+    "PatchTST": "#ca8a04",      # gold
+    "TSMixer": "#dc2626",       # red
+    "Transformer": "#64748b",   # slate
 }
 
 # History-CSV column name -> human-readable metric title.

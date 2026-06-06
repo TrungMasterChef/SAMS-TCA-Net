@@ -1,4 +1,4 @@
-"""Train and evaluate SAMS-TCA-Net plus baseline model configs."""
+"""Train and evaluate MSCA-G plus baseline model configs."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-csv", default="outputs/model_results.csv")
-    parser.add_argument("configs", nargs="*", help="Optional config paths. Defaults to SAMS-TCA and baselines.")
+    parser.add_argument("configs", nargs="*", help="Optional config paths. Defaults to MSCA-G and baselines.")
     return parser.parse_args()
 
 

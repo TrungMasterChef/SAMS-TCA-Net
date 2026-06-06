@@ -1,4 +1,4 @@
-"""Train SAMS-TCA-Net with CrossEntropyLoss."""
+"""Train a model with CrossEntropyLoss."""
 
 from __future__ import annotations
 
@@ -317,7 +317,7 @@ def train(config_path: str) -> list[dict[str, float | int]]:
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/sams_tca.yaml")
+    parser.add_argument("--config", default="configs/msca_net.yaml")
     return parser.parse_args()
 
 

@@ -1,4 +1,4 @@
-"""Train and evaluate all SAMS-TCA-Net ablation configs."""
+"""Train and evaluate all ablation configs in a directory."""
 
 from __future__ import annotations
 

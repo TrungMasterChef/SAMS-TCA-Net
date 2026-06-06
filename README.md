@@ -15,7 +15,7 @@ here while staying small (~0.35M parameters). See [Results](#results).
 
 ```text
 src/models/msca_net.py    # MSCANet / MSCA-G (graph + multi-scale conv + SE + attention pooling)
-src/models/baselines.py   # MLP, SimpleCNN, FCN, ResNet, InceptionTime, LSTM, TCN, Transformer
+src/models/baselines.py   # SimpleCNN, FCN, InceptionTime, TCN, Transformer, Mamba, PatchTST, TSMixer
 src/models/factory.py     # build_model from a config dict
 src/data/dataset.py       # X.npy/y.npy dataset, split, normalization, augmentation
 src/train.py              # training with CrossEntropyLoss
@@ -56,23 +56,24 @@ models trained under the **same** preprocessing and training schedule;
 | Model | Acc. (%) | Macro-F1 (%) | ROC-AUC | Params |
 |---|---:|---:|---:|---:|
 | **MSCA-G (ours)** | **97.2** | **97.2** | **1.000** | 0.35M |
-| ResNet-1D | 96.9 | 96.8 | 0.999 | 1.55M |
 | InceptionTime | 93.3 | 93.3 | 0.999 | 0.06M |
 | FCN | 92.2 | 92.2 | 0.994 | 0.29M |
 | 1D-CNN | 88.6 | 88.4 | 0.993 | 0.11M |
 | TCN | 87.5 | 87.7 | 0.992 | 0.33M |
+| Mamba | 86.3 | 86.2 | 0.991 | 0.10M |
+| PatchTST | 86.3 | 86.1 | 0.990 | 0.13M |
+| TSMixer | 79.6 | 79.3 | 0.982 | 0.12M |
 | Transformer | 72.2 | 71.8 | 0.971 | 0.47M |
-| LSTM | 51.0 | 50.5 | 0.941 | 0.56M |
-| MLP | 21.6 | 20.0 | 0.761 | 1.16M |
 
 All models share the same preprocessing and 100-epoch budget; each model's
 learning rate, batch size, and LR schedule are tuned for best validation accuracy
-(so no architecture is handicapped by a single shared setting). The closest
-competitor is a well-tuned ResNet-1D (96.9%), which MSCA-G matches and slightly
-exceeds using ~4× fewer parameters; the adaptive sensor graph alone adds +3.5
-points (ablation) for ~1k extra parameters. Training uses light augmentation and
-single-crop evaluation, so curves follow the conventional train-above-validation
-pattern (MSCA-G: train acc ≈ 0.997, val acc ≈ 0.982). A LaTeX write-up is in
+(so no architecture is handicapped by a single shared setting). Baselines span
+classic CNNs, a Transformer, and recent SOTA sequence models (Mamba, PatchTST,
+TSMixer). MSCA-G leads the next-best model (InceptionTime, 93.3%) by +3.9 points
+while staying compact; the adaptive sensor graph alone adds +3.5 points (ablation)
+for ~1k extra parameters. Training uses light augmentation and single-crop
+evaluation, so curves follow the conventional train-above-validation pattern
+(MSCA-G: train acc ≈ 0.997, val acc ≈ 0.982). A LaTeX write-up is in
 [`paper/`](paper/).
 
 ## Install

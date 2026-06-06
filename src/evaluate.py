@@ -1,4 +1,4 @@
-"""Evaluate SAMS-TCA-Net classification metrics."""
+"""Evaluate classification metrics for a trained model."""
 
 from __future__ import annotations
 
@@ -184,7 +184,7 @@ def evaluate(config_path: str, checkpoint_path: str | None = None) -> dict[str, 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/sams_tca.yaml")
+    parser.add_argument("--config", default="configs/msca_net.yaml")
     parser.add_argument("--checkpoint", default=None)
     return parser.parse_args()
 
